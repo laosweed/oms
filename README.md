@@ -4,6 +4,27 @@ A comprehensive web-based admin panel for managing organizations, users, project
 
 ## Features
 
+### 🔐 Authentication System
+- Secure login with phone number and PIN
+- API integration with backend authentication service
+- JWT token management with automatic refresh
+- Protected routes requiring authentication
+- User session management with localStorage
+- Automatic redirect to login for unauthenticated users
+- User profile display in sidebar with role badges
+- Logout functionality
+
+**API Endpoint:** `http://10.0.100.19:9904/api/v1/auth/login`
+
+**Demo Credentials:**
+- Phone: `+8562079991636`
+- PIN: `112233`
+
+**Supported Roles:**
+- SuperAdmin: Full system access
+- Admin: Administrative access
+- AdminOrganization: Organization-specific access
+
 ### 🏢 Organization Management
 - Create, edit, and delete organizations
 - Track organization details (contact info, industry, employee count)
@@ -85,8 +106,15 @@ A comprehensive web-based admin panel for managing organizations, users, project
 ```
 src/
 ├── components/
-│   └── Sidebar.jsx          # Navigation sidebar
+│   ├── Sidebar.jsx          # Navigation sidebar
+│   ├── ProtectedRoute.jsx   # Route protection component
+│   └── LoadingSpinner.jsx   # Loading spinner component
+├── contexts/
+│   └── AuthContext.jsx      # Authentication context
+├── utils/
+│   └── api.js              # API client utilities
 ├── pages/
+│   ├── Login.jsx            # Login page
 │   ├── Dashboard.jsx        # Main dashboard
 │   ├── OrganizationManagement.jsx
 │   ├── UserManagement.jsx
@@ -180,4 +208,4 @@ For support or questions, please open an issue in the repository or contact the 
 
 ---
 
-**Note**: This is a frontend-only application with mock data. For production use, you'll need to integrate with a backend API and implement proper authentication and authorization. 
+**Note**: This application now integrates with a backend API for authentication. The login system connects to `http://10.0.100.19:9904/api/v1/auth/login` for user authentication. 

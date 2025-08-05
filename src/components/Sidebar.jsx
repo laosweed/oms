@@ -7,12 +7,16 @@ import {
   FolderOpen, 
   FileText,
   Menu,
-  X
+  X,
+  LogOut,
+  User
 } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 
 const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(false)
+  const { user, logout } = useAuth()
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -67,6 +71,37 @@ const Sidebar = () => {
             })}
           </div>
         </nav>
+
+        {/* User section */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-gray-200">
+          <div className="flex items-center space-x-3 mb-3">
+            <div className="h-8 w-8 bg-primary-100 rounded-full flex items-center justify-center">
+              <User className="h-4 w-4 text-primary-600" />
+            </div>
+                         <div className="flex-1 min-w-0">
+               <p className="text-sm font-medium text-gray-900 truncate">
+                 {user?.name || 'User'}
+               </p>
+               <div className="flex items-center space-x-2">
+                 <p className="text-xs text-gray-500 truncate">
+                   {user?.identified || '+8562079991636'}
+                 </p>
+                 {user?.role && (
+                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800">
+                     {user.role}
+                   </span>
+                 )}
+               </div>
+             </div>
+          </div>
+          <button
+            onClick={logout}
+            className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors duration-200"
+          >
+            <LogOut className="mr-3 h-5 w-5" />
+            Sign out
+          </button>
+        </div>
       </div>
 
       {/* Overlay for mobile */}

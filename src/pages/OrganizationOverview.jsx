@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useApi } from '../utils/api'
+import LoadingSpinner from '../components/LoadingSpinner'
 import { 
   ArrowLeft,
   Building2,
@@ -20,16 +22,27 @@ import {
   X,
   FileText,
   Download,
-  Upload
+  Upload,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  Clock
 } from 'lucide-react'
 
 const OrganizationOverview = () => {
-  const { id } = useParams()
+  const { id } = useParams() // This will be the organization code
   const navigate = useNavigate()
+  const api = useApi()
   const [organization, setOrganization] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [teamsLoading, setTeamsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('details')
   const [showAddTeamModal, setShowAddTeamModal] = useState(false)
   const [showAddUserModal, setShowAddUserModal] = useState(false)
+  const [showEditUserModal, setShowEditUserModal] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
   const [teamFormData, setTeamFormData] = useState({
     name: '',
     description: '',
@@ -38,15 +51,11 @@ const OrganizationOverview = () => {
   const [userFormData, setUserFormData] = useState({
     firstName: '',
     lastName: '',
-    email: '',
-    phone: '',
-    role: 'Employee',
-    department: '',
-    team: '',
-    status: 'Active',
-    joinDate: '',
-    location: '',
-    manager: ''
+    gender: 'Male',
+    dob: '',
+    role: 'Member',
+    teamId: '',
+    positionId: ''
   })
 
   const [showAddDocumentModal, setShowAddDocumentModal] = useState(false)
@@ -59,268 +68,127 @@ const OrganizationOverview = () => {
     status: 'Active'
   })
 
-  // Mock approval requests data
-  const [approvalRequests, setApprovalRequests] = useState([
-    {
-      id: 1,
-      userId: 15,
-      userName: 'Alex Johnson',
-      userEmail: 'alex.johnson@techcorp.com',
-      teamId: 1,
-      teamName: 'Development Team',
-      department: 'IT',
-      role: 'Employee',
-      requestDate: '2024-01-15',
-      status: 'Pending',
-      reason: 'New team member joining development team'
-    },
-    {
-      id: 2,
-      userId: 16,
-      userName: 'Sarah Miller',
-      userEmail: 'sarah.miller@techcorp.com',
-      teamId: 2,
-      teamName: 'HR Team',
-      department: 'HR',
-      role: 'Employee',
-      requestDate: '2024-01-14',
-      status: 'Pending',
-      reason: 'HR team expansion'
-    },
-    {
-      id: 3,
-      userId: 17,
-      userName: 'Mike Davis',
-      userEmail: 'mike.davis@techcorp.com',
-      teamId: 1,
-      teamName: 'Development Team',
-      department: 'IT',
-      role: 'Employee',
-      requestDate: '2024-01-13',
-      status: 'Approved',
-      reason: 'Backend developer joining team'
-    }
-  ])
+  // Approval requests data
+  const [approvalRequests, setApprovalRequests] = useState([])
+  const [approvalRequestsLoading, setApprovalRequestsLoading] = useState(false)
 
-
-
-  // Mock data - in a real app, this would come from an API
-  const mockOrganizations = [
-    {
-      id: 1,
-      name: 'TechCorp Solutions',
-      email: 'contact@techcorp.com',
-      phone: '+1 (555) 123-4567',
-      address: '123 Business Ave, Tech City, TC 12345',
-      industry: 'Technology',
-      employees: 150,
-      founded: '2018',
-      status: 'Active',
-      teams: [
-        {
-          id: 1,
-          name: 'Development Team',
-          description: 'Software development and engineering',
-          leader: 'John Doe',
-          members: [
-            { id: 1, name: 'John Doe', role: 'Admin', department: 'IT', status: 'Active' },
-            { id: 7, name: 'David Kim', role: 'Employee', department: 'IT', status: 'Active' },
-            { id: 8, name: 'Sarah Chen', role: 'Employee', department: 'IT', status: 'Active' }
-          ]
-        },
-        {
-          id: 2,
-          name: 'HR Team',
-          description: 'Human resources and recruitment',
-          leader: 'Emily Brown',
-          members: [
-            { id: 4, name: 'Emily Brown', role: 'Manager', department: 'HR', status: 'Inactive' },
-            { id: 9, name: 'Lisa Wang', role: 'Employee', department: 'HR', status: 'Active' }
-          ]
-        }
-      ],
-             users: [
-         { id: 1, name: 'John Doe', role: 'Admin', department: 'IT', status: 'Active', team: 'Development Team' },
-         { id: 4, name: 'Emily Brown', role: 'Manager', department: 'HR', status: 'Inactive', team: 'HR Team' },
-         { id: 7, name: 'David Kim', role: 'Employee', department: 'IT', status: 'Active', team: 'Development Team' },
-         { id: 8, name: 'Sarah Chen', role: 'Employee', department: 'IT', status: 'Active', team: 'Development Team' },
-         { id: 9, name: 'Lisa Wang', role: 'Employee', department: 'HR', status: 'Active', team: 'HR Team' }
-       ],
-       documents: [
-         {
-           id: 1,
-           title: 'Employee Handbook',
-           description: 'Complete employee handbook with policies and procedures',
-           category: 'HR',
-           author: 'Emily Brown',
-           version: '2.1',
-           status: 'Active',
-           uploadDate: '2024-01-10',
-           fileSize: '2.5 MB',
-           downloads: 45
-         },
-         {
-           id: 2,
-           title: 'Development Guidelines',
-           description: 'Coding standards and development best practices',
-           category: 'Technical',
-           author: 'John Doe',
-           version: '1.5',
-           status: 'Active',
-           uploadDate: '2024-01-15',
-           fileSize: '1.8 MB',
-           downloads: 32
-         },
-         {
-           id: 3,
-           title: 'Project Proposal Template',
-           description: 'Standard template for project proposals',
-           category: 'Business',
-           author: 'David Kim',
-           version: '1.0',
-           status: 'Active',
-           uploadDate: '2024-01-08',
-           fileSize: '0.8 MB',
-           downloads: 28
-         }
-       ]
-    },
-    {
-      id: 2,
-      name: 'Global Innovations Ltd',
-      email: 'info@globalinnovations.com',
-      phone: '+1 (555) 987-6543',
-      address: '456 Innovation St, Business District, BD 67890',
-      industry: 'Consulting',
-      employees: 75,
-      founded: '2020',
-      status: 'Active',
-      teams: [
-        {
-          id: 3,
-          name: 'Marketing Team',
-          description: 'Digital marketing and brand management',
-          leader: 'Sarah Wilson',
-          members: [
-            { id: 2, name: 'Sarah Wilson', role: 'Manager', department: 'Marketing', status: 'Active' },
-            { id: 10, name: 'Mike Rodriguez', role: 'Employee', department: 'Marketing', status: 'Active' }
-          ]
-        },
-        {
-          id: 4,
-          name: 'Finance Team',
-          description: 'Financial planning and accounting',
-          leader: 'Alex Chen',
-          members: [
-            { id: 5, name: 'Alex Chen', role: 'Employee', department: 'Finance', status: 'Active' },
-            { id: 11, name: 'Jennifer Lee', role: 'Employee', department: 'Finance', status: 'Active' }
-          ]
-        }
-      ],
-             users: [
-         { id: 2, name: 'Sarah Wilson', role: 'Manager', department: 'Marketing', status: 'Active', team: 'Marketing Team' },
-         { id: 5, name: 'Alex Chen', role: 'Employee', department: 'Finance', status: 'Active', team: 'Finance Team' },
-         { id: 10, name: 'Mike Rodriguez', role: 'Employee', department: 'Marketing', status: 'Active', team: 'Marketing Team' },
-         { id: 11, name: 'Jennifer Lee', role: 'Employee', department: 'Finance', status: 'Active', team: 'Finance Team' }
-       ],
-       documents: [
-         {
-           id: 4,
-           title: 'Marketing Strategy 2024',
-           description: 'Annual marketing strategy and campaign plans',
-           category: 'Marketing',
-           author: 'Sarah Wilson',
-           version: '1.0',
-           status: 'Active',
-           uploadDate: '2024-01-12',
-           fileSize: '3.2 MB',
-           downloads: 18
-         },
-         {
-           id: 5,
-           title: 'Financial Report Q4 2023',
-           description: 'Quarterly financial performance report',
-           category: 'Finance',
-           author: 'Alex Chen',
-           version: '1.0',
-           status: 'Active',
-           uploadDate: '2024-01-05',
-           fileSize: '1.5 MB',
-           downloads: 25
-         }
-       ]
-    },
-    {
-      id: 3,
-      name: 'Creative Studios',
-      email: 'hello@creativestudios.com',
-      phone: '+1 (555) 456-7890',
-      address: '789 Creative Blvd, Design Town, DT 11111',
-      industry: 'Design',
-      employees: 25,
-      founded: '2019',
-      status: 'Active',
-      teams: [
-        {
-          id: 5,
-          name: 'Design Team',
-          description: 'UI/UX design and creative work',
-          leader: 'Lisa Park',
-          members: [
-            { id: 6, name: 'Lisa Park', role: 'Employee', department: 'Design', status: 'Active' },
-            { id: 12, name: 'Tom Wilson', role: 'Employee', department: 'Design', status: 'Active' }
-          ]
-        },
-        {
-          id: 6,
-          name: 'Sales Team',
-          description: 'Client acquisition and sales',
-          leader: 'Mike Johnson',
-          members: [
-            { id: 3, name: 'Mike Johnson', role: 'Employee', department: 'Sales', status: 'Active' },
-            { id: 13, name: 'Emma Davis', role: 'Employee', department: 'Sales', status: 'Active' }
-          ]
-        }
-      ],
-             users: [
-         { id: 3, name: 'Mike Johnson', role: 'Employee', department: 'Sales', status: 'Active', team: 'Sales Team' },
-         { id: 6, name: 'Lisa Park', role: 'Employee', department: 'Design', status: 'Active', team: 'Design Team' },
-         { id: 12, name: 'Tom Wilson', role: 'Employee', department: 'Design', status: 'Active', team: 'Design Team' },
-         { id: 13, name: 'Emma Davis', role: 'Employee', department: 'Sales', status: 'Active', team: 'Sales Team' }
-       ],
-       documents: [
-         {
-           id: 6,
-           title: 'Design System Guide',
-           description: 'Complete design system and brand guidelines',
-           category: 'Design',
-           author: 'Lisa Park',
-           version: '2.0',
-           status: 'Active',
-           uploadDate: '2024-01-18',
-           fileSize: '4.1 MB',
-           downloads: 15
-         },
-         {
-           id: 7,
-           title: 'Sales Process Manual',
-           description: 'Standardized sales process and procedures',
-           category: 'Sales',
-           author: 'Mike Johnson',
-           version: '1.2',
-           status: 'Active',
-           uploadDate: '2024-01-14',
-           fileSize: '2.8 MB',
-           downloads: 22
-         }
-       ]
-    }
-  ]
-
+  // Fetch organization data from API
   useEffect(() => {
-    const org = mockOrganizations.find(org => org.id === parseInt(id))
-    setOrganization(org)
+    fetchOrganization()
   }, [id])
+
+  // Fetch users when Users tab is selected
+  useEffect(() => {
+    if (activeTab === 'users') {
+      fetchUsers()
+    }
+  }, [activeTab, id])
+
+  // Fetch teams when Teams tab is selected
+  useEffect(() => {
+    if (activeTab === 'teams') {
+      fetchTeams()
+    }
+  }, [activeTab, id])
+
+  // Fetch approval requests when Approvals tab is selected
+  useEffect(() => {
+    if (activeTab === 'approvals') {
+      fetchApprovalRequests()
+    }
+  }, [activeTab, id])
+
+  const fetchOrganization = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/organizations/${id}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        // Handle the nested API response structure
+        const orgData = data.result?.data?.organization || data.result?.data
+        if (orgData) {
+          setOrganization(orgData)
+        } else {
+          setError('Organization not found')
+        }
+      } else {
+        const errorData = await response.json()
+        setError(errorData.message || 'Failed to fetch organization')
+      }
+    } catch (error) {
+      console.error('Error fetching organization:', error)
+      setError('Network error. Please check your connection.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchUsers = async () => {
+    try {
+      setUsersLoading(true)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/users/${id}/org`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const usersData = data.result?.data?.users || data.result?.data || []
+        setOrganization(prev => ({
+          ...prev,
+          users: usersData
+        }))
+      } else {
+        console.error('Failed to fetch users')
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    } finally {
+      setUsersLoading(false)
+    }
+  }
+
+  const fetchTeams = async () => {
+    try {
+      setTeamsLoading(true)
+      setError(null)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/teams/${id}/org`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const teamsData = data.result?.data?.teams || data.result?.data || []
+        setOrganization(prev => ({
+          ...prev,
+          teams: teamsData
+        }))
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to fetch teams:', errorData.message || 'Unknown error')
+      }
+    } catch (error) {
+      console.error('Error fetching teams:', error)
+    } finally {
+      setTeamsLoading(false)
+    }
+  }
+
+  const fetchApprovalRequests = async () => {
+    try {
+      setApprovalRequestsLoading(true)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/teams/${id}/org`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const joinRequestsData = data.result?.data?.joinRequests || []
+        setApprovalRequests(joinRequestsData)
+      } else {
+        console.error('Failed to fetch approval requests')
+      }
+    } catch (error) {
+      console.error('Error fetching approval requests:', error)
+    } finally {
+      setApprovalRequestsLoading(false)
+    }
+  }
 
   const handleAddTeam = (e) => {
     e.preventDefault()
@@ -332,7 +200,7 @@ const OrganizationOverview = () => {
     
     setOrganization(prev => ({
       ...prev,
-      teams: [...prev.teams, newTeam]
+      teams: [...(prev.teams || []), newTeam]
     }))
     
     setShowAddTeamModal(false)
@@ -353,29 +221,119 @@ const OrganizationOverview = () => {
     
     setOrganization(prev => ({
       ...prev,
-      users: [...prev.users, newUser]
+      users: [...(prev.users || []), newUser]
     }))
     
     setShowAddUserModal(false)
     setUserFormData({
       firstName: '',
       lastName: '',
-      email: '',
-      phone: '',
-      role: 'Employee',
-      department: '',
-      team: '',
-      status: 'Active',
-      joinDate: '',
-      location: '',
-      manager: ''
+      gender: 'Male',
+      dob: '',
+      role: 'Member',
+      teamId: '',
+      positionId: ''
     })
   }
 
-  const handleApproval = (requestId, status) => {
-    setApprovalRequests(prev => prev.map(request => 
-      request.id === requestId ? { ...request, status } : request
-    ))
+  const handleEditUser = (user) => {
+    setEditingUser(user)
+    setUserFormData({
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      gender: user.gender || 'Male',
+      dob: user.dob ? user.dob.split('T')[0] : '',
+      role: user.role || 'Member',
+      teamId: user.teamId || '',
+      positionId: user.positionId || ''
+    })
+    setShowEditUserModal(true)
+    // Fetch teams when opening edit modal
+    fetchTeams()
+  }
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault()
+    if (!editingUser) return
+
+    try {
+      const updateData = {
+        gender: userFormData.gender,
+        firstName: userFormData.firstName,
+        lastName: userFormData.lastName,
+        dob: userFormData.dob ? `${userFormData.dob}T00:00:00Z` : null,
+        role: userFormData.role,
+        teamId: userFormData.teamId || null,
+        positionId: userFormData.positionId || null
+      }
+
+      const response = await api.put(`http://10.0.100.19:9904/api/v1/users/${editingUser.id}`, updateData)
+      
+      if (response.ok) {
+        // Refresh users data
+        await fetchUsers()
+        setShowEditUserModal(false)
+        setEditingUser(null)
+        setUserFormData({
+          firstName: '',
+          lastName: '',
+          gender: 'Male',
+          dob: '',
+          role: 'Member',
+          teamId: '',
+          positionId: ''
+        })
+      } else {
+        const errorData = await response.json()
+        alert(errorData.message || 'Failed to update user')
+      }
+    } catch (error) {
+      console.error('Error updating user:', error)
+      alert('Network error. Please try again.')
+    }
+  }
+
+  const handleDeleteUser = async (userId, userName) => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to delete user "${userName}"? This action cannot be undone.`
+    )
+    
+    if (!confirmed) return
+    
+    try {
+      const response = await api.delete(`http://10.0.100.19:9904/api/v1/users/${userId}`)
+      
+      if (response.ok) {
+        // Refresh users data after successful deletion
+        await fetchUsers()
+        alert(`User "${userName}" has been successfully deleted.`)
+      } else {
+        const errorData = await response.json()
+        alert(errorData.message || 'Failed to delete user')
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error)
+      alert('Network error. Please try again.')
+    }
+  }
+
+  const handleApproval = async (requestId, status) => {
+    try {
+      // TODO: Implement API call to approve/reject request
+      // const response = await api.put(`http://10.0.100.19:9904/api/v1/teams/${id}/approve/${requestId}`, { status })
+      
+      // For now, update local state
+      setApprovalRequests(prev => 
+        prev.map(request => 
+          request.id === requestId 
+            ? { ...request, status: status }
+            : request
+        )
+      )
+    } catch (error) {
+      console.error('Error updating approval status:', error)
+    }
   }
 
   const handleAddDocument = (e) => {
@@ -390,7 +348,7 @@ const OrganizationOverview = () => {
     
     setOrganization(prev => ({
       ...prev,
-      documents: [...prev.documents, newDocument]
+      documents: [...(prev.documents || []), newDocument]
     }))
     
     setShowAddDocumentModal(false)
@@ -431,6 +389,25 @@ const OrganizationOverview = () => {
     { id: 'approvals', name: 'Approvals', icon: Eye }
   ]
 
+  if (loading) {
+    return (
+      <div className="p-6">
+        <LoadingSpinner />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-12">
+          <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+          <p className="text-gray-500">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!organization) {
     return (
       <div className="p-6">
@@ -441,6 +418,11 @@ const OrganizationOverview = () => {
       </div>
     )
   }
+
+  // Initialize empty arrays for teams, users, and documents if they don't exist in API response
+  const teams = organization.teams || []
+  const users = organization.users || []
+  const documents = organization.documents || []
 
   return (
     <div className="p-6">
@@ -456,7 +438,7 @@ const OrganizationOverview = () => {
             </button>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{organization.name}</h1>
-              <p className="text-gray-600 mt-1">{organization.industry} • Founded {organization.founded}</p>
+              <p className="text-gray-600 mt-1">Code: {organization.code} • Created {new Date(organization.createdAt).toLocaleDateString()}</p>
             </div>
           </div>
                      <div className="flex space-x-3">
@@ -491,7 +473,7 @@ const OrganizationOverview = () => {
           <div className="flex items-center">
             <Users className="h-8 w-8 text-blue-600 mr-3" />
             <div>
-              <p className="text-2xl font-bold text-gray-900">{organization.users.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{users.length}</p>
               <p className="text-sm text-gray-500">Total Users</p>
             </div>
           </div>
@@ -500,7 +482,7 @@ const OrganizationOverview = () => {
           <div className="flex items-center">
             <Users2 className="h-8 w-8 text-green-600 mr-3" />
             <div>
-              <p className="text-2xl font-bold text-gray-900">{organization.teams.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{teams.length}</p>
               <p className="text-sm text-gray-500">Teams</p>
             </div>
           </div>
@@ -509,7 +491,7 @@ const OrganizationOverview = () => {
           <div className="flex items-center">
             <TrendingUp className="h-8 w-8 text-purple-600 mr-3" />
             <div>
-              <p className="text-2xl font-bold text-gray-900">{organization.users.filter(u => u.status === 'Active').length}</p>
+              <p className="text-2xl font-bold text-gray-900">{users.filter(u => u.status === 'Active').length}</p>
               <p className="text-sm text-gray-500">Active Users</p>
             </div>
           </div>
@@ -518,7 +500,7 @@ const OrganizationOverview = () => {
            <div className="flex items-center">
              <Building2 className="h-8 w-8 text-orange-600 mr-3" />
              <div>
-               <p className="text-2xl font-bold text-gray-900">{new Set(organization.users.map(u => u.department)).size}</p>
+               <p className="text-2xl font-bold text-gray-900">{new Set(users.map(u => u.department)).size}</p>
                <p className="text-sm text-gray-500">Departments</p>
              </div>
            </div>
@@ -527,7 +509,7 @@ const OrganizationOverview = () => {
            <div className="flex items-center">
              <FileText className="h-8 w-8 text-indigo-600 mr-3" />
              <div>
-               <p className="text-2xl font-bold text-gray-900">{organization.documents?.length || 0}</p>
+               <p className="text-2xl font-bold text-gray-900">{documents.length}</p>
                <p className="text-sm text-gray-500">Documents</p>
              </div>
            </div>
@@ -565,50 +547,196 @@ const OrganizationOverview = () => {
         {activeTab === 'details' && (
           <div>
             <h2 className="text-xl font-semibold mb-6">Organization Details</h2>
-                         <div className="space-y-6">
+             
+             {/* Organization Overview Card */}
+             <div className="bg-gradient-to-r from-primary-50 to-blue-50 rounded-xl p-6 mb-8">
+               <div className="flex items-center justify-between mb-4">
+                 <div className="flex items-center">
+                   <div className="h-16 w-16 bg-primary-100 rounded-full flex items-center justify-center mr-4">
+                     <Building2 className="h-8 w-8 text-primary-600" />
+                   </div>
                <div>
-                 <h3 className="text-lg font-medium text-gray-900 mb-4">Contact Information</h3>
-                 <div className="space-y-4">
-                   <div className="flex items-center text-sm">
-                     <Mail className="h-4 w-4 text-gray-400 mr-3" />
-                     <span className="text-gray-900">{organization.email}</span>
+                     <h3 className="text-2xl font-bold text-gray-900">{organization.name}</h3>
+                     <p className="text-primary-600 font-medium">#{organization.code}</p>
                    </div>
-                   <div className="flex items-center text-sm">
-                     <Phone className="h-4 w-4 text-gray-400 mr-3" />
-                     <span className="text-gray-900">{organization.phone}</span>
-                   </div>
-                   <div className="flex items-center text-sm">
-                     <MapPin className="h-4 w-4 text-gray-400 mr-3" />
-                     <span className="text-gray-900">{organization.address}</span>
-                   </div>
+                 </div>
+                 <div className="text-right">
+                   <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${
+                     organization.isEnabled 
+                       ? 'bg-green-100 text-green-800 border border-green-200' 
+                       : 'bg-red-100 text-red-800 border border-red-200'
+                   }`}>
+                     {organization.isEnabled ? '🟢 Active' : '🔴 Inactive'}
+                   </span>
                  </div>
                </div>
                
-               <div>
-                 <h3 className="text-lg font-medium text-gray-900 mb-4">Company Information</h3>
+               {organization.description && (
+                 <div className="bg-white/60 rounded-lg p-4 mb-4">
+                   <p className="text-gray-700 italic">"{organization.description}"</p>
+                 </div>
+               )}
+               
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                 <div className="flex items-center text-gray-600">
+                   <Calendar className="h-4 w-4 mr-2" />
+                   <span>Created {new Date(organization.createdAt).toLocaleDateString()}</span>
+                 </div>
+                 <div className="flex items-center text-gray-600">
+                   <Users className="h-4 w-4 mr-2" />
+                   <span>{users.length} Members</span>
+                 </div>
+                 <div className="flex items-center text-gray-600">
+                   <Users2 className="h-4 w-4 mr-2" />
+                   <span>{teams.length} Teams</span>
+                 </div>
+               </div>
+             </div>
+
+             {/* Contact Information */}
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+               <div className="bg-white border border-gray-200 rounded-xl p-6">
+                 <div className="flex items-center mb-4">
+                   <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                     <Mail className="h-5 w-5 text-blue-600" />
+                   </div>
+                   <h3 className="text-lg font-semibold text-gray-900">Contact Information</h3>
+                 </div>
+                 
                  <div className="space-y-4">
-                   <div className="flex items-center text-sm">
-                     <Building2 className="h-4 w-4 text-gray-400 mr-3" />
-                     <span className="text-gray-900">Industry: {organization.industry}</span>
+                   <div className="flex items-center p-3 bg-gray-50 rounded-lg">
+                     <Mail className="h-5 w-5 text-gray-400 mr-3" />
+                     <div>
+                       <p className="text-sm text-gray-500">Email Address</p>
+                       <p className="font-medium text-gray-900">{organization.email}</p>
                    </div>
-                   <div className="flex items-center text-sm">
-                     <Calendar className="h-4 w-4 text-gray-400 mr-3" />
-                     <span className="text-gray-900">Founded: {organization.founded}</span>
                    </div>
-                   <div className="flex items-center text-sm">
-                     <Users className="h-4 w-4 text-gray-400 mr-3" />
-                     <span className="text-gray-900">Employees: {organization.employees}</span>
+                   
+                   <div className="flex items-center p-3 bg-gray-50 rounded-lg">
+                     <Phone className="h-5 w-5 text-gray-400 mr-3" />
+                     <div>
+                       <p className="text-sm text-gray-500">Phone Number</p>
+                       <p className="font-medium text-gray-900">{organization.phone}</p>
                    </div>
-                   <div className="pt-2">
-                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                       organization.status === 'Active' 
-                         ? 'bg-green-100 text-green-800' 
-                         : 'bg-red-100 text-red-800'
-                     }`}>
-                       Status: {organization.status}
-                     </span>
+                   </div>
+                   
+                   <div className="flex items-center p-3 bg-gray-50 rounded-lg">
+                     <MapPin className="h-5 w-5 text-gray-400 mr-3" />
+                     <div>
+                       <p className="text-sm text-gray-500">Address</p>
+                       <p className="font-medium text-gray-900">{organization.address}</p>
+                 </div>
+               </div>
+               
+                   {organization.websiteURL && (
+                     <div className="flex items-center p-3 bg-gray-50 rounded-lg">
+                       <svg className="h-5 w-5 text-gray-400 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                       </svg>
+               <div>
+                         <p className="text-sm text-gray-500">Website</p>
+                         <a href={organization.websiteURL} target="_blank" rel="noopener noreferrer" className="font-medium text-primary-600 hover:text-primary-700">
+                           {organization.websiteURL}
+                         </a>
+                       </div>
+                     </div>
+                   )}
+                 </div>
+               </div>
+
+               {/* Organization Stats */}
+               <div className="bg-white border border-gray-200 rounded-xl p-6">
+                 <div className="flex items-center mb-4">
+                   <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                     <TrendingUp className="h-5 w-5 text-green-600" />
+                   </div>
+                   <h3 className="text-lg font-semibold text-gray-900">Organization Stats</h3>
+                 </div>
+                 
+                 <div className="space-y-4">
+                   <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg">
+                     <div className="flex items-center">
+                       <Users className="h-6 w-6 text-blue-600 mr-3" />
+                       <div>
+                         <p className="text-sm text-blue-600 font-medium">Total Users</p>
+                         <p className="text-xs text-blue-500">Active members</p>
+                   </div>
+                   </div>
+                     <span className="text-2xl font-bold text-blue-700">{users.length}</span>
+                   </div>
+                   
+                   <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-green-100 rounded-lg">
+                     <div className="flex items-center">
+                       <Users2 className="h-6 w-6 text-green-600 mr-3" />
+                       <div>
+                         <p className="text-sm text-green-600 font-medium">Teams</p>
+                         <p className="text-xs text-green-500">Active teams</p>
                    </div>
                  </div>
+                     <span className="text-2xl font-bold text-green-700">{teams.length}</span>
+                   </div>
+                   
+                   <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg">
+                     <div className="flex items-center">
+                       <FileText className="h-6 w-6 text-purple-600 mr-3" />
+                       <div>
+                         <p className="text-sm text-purple-600 font-medium">Documents</p>
+                         <p className="text-xs text-purple-500">Shared files</p>
+                       </div>
+                     </div>
+                     <span className="text-2xl font-bold text-purple-700">{documents.length}</span>
+                   </div>
+                   
+                   <div className="flex items-center justify-between p-4 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg">
+                     <div className="flex items-center">
+                       <Building2 className="h-6 w-6 text-orange-600 mr-3" />
+                       <div>
+                         <p className="text-sm text-orange-600 font-medium">Departments</p>
+                         <p className="text-xs text-orange-500">Unique departments</p>
+                       </div>
+                     </div>
+                     <span className="text-2xl font-bold text-orange-700">{new Set(users.map(u => u.department)).size}</span>
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             {/* Quick Actions */}
+             <div className="mt-8 bg-white border border-gray-200 rounded-xl p-6">
+               <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 <button 
+                   onClick={() => setShowAddUserModal(true)}
+                   className="flex items-center p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                 >
+                   <User className="h-6 w-6 text-blue-600 mr-3" />
+                   <div className="text-left">
+                     <p className="font-medium text-blue-900">Add User</p>
+                     <p className="text-sm text-blue-600">Invite new member</p>
+                   </div>
+                 </button>
+                 
+                 <button 
+                   onClick={() => setShowAddTeamModal(true)}
+                   className="flex items-center p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                 >
+                   <Users2 className="h-6 w-6 text-green-600 mr-3" />
+                   <div className="text-left">
+                     <p className="font-medium text-green-900">Create Team</p>
+                     <p className="text-sm text-green-600">Organize members</p>
+                   </div>
+                 </button>
+                 
+                 <button 
+                   onClick={() => setShowAddDocumentModal(true)}
+                   className="flex items-center p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                 >
+                   <Upload className="h-6 w-6 text-purple-600 mr-3" />
+                   <div className="text-left">
+                     <p className="font-medium text-purple-900">Upload Document</p>
+                     <p className="text-sm text-purple-600">Share files</p>
+                   </div>
+                 </button>
                </div>
              </div>
           </div>
@@ -617,89 +745,273 @@ const OrganizationOverview = () => {
         {/* Teams Tab */}
         {activeTab === 'teams' && (
           <div>
+            {/* Header with Stats */}
+            <div className="mb-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold">Teams</h2>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Organization Teams</h2>
+                  <p className="text-gray-600 mt-1">Manage and view all teams in {organization.name}</p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={fetchTeams}
+                    disabled={teamsLoading}
+                    className="btn-secondary flex items-center"
+                    title="Refresh teams"
+                  >
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
               <button
                 onClick={() => setShowAddTeamModal(true)}
                 className="btn-primary flex items-center"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add Team
+                    Create Team
               </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {organization.teams.map((team) => (
-                <div key={team.id} className="border border-gray-200 rounded-lg p-6">
-                  <div className="flex items-start justify-between mb-4">
+              </div>
+
+              {/* Team Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-2xl font-bold text-blue-700">{teams.length}</p>
+                      <p className="text-blue-600 font-medium">Total Teams</p>
+                    </div>
+                    <div className="h-12 w-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                      <Users2 className="h-6 w-6 text-blue-700" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-2xl font-bold text-green-700">{teams.filter(t => t.isEnabled !== false).length}</p>
+                      <p className="text-green-600 font-medium">Active Teams</p>
+                    </div>
+                    <div className="h-12 w-12 bg-green-200 rounded-lg flex items-center justify-center">
+                      <FolderOpen className="h-6 w-6 text-green-700" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-2xl font-bold text-purple-700">
+                        {teams.reduce((total, team) => total + (team.members?.length || team.memberCount || 0), 0)}
+                      </p>
+                      <p className="text-purple-600 font-medium">Total Members</p>
+                    </div>
+                    <div className="h-12 w-12 bg-purple-200 rounded-lg flex items-center justify-center">
+                      <Users className="h-6 w-6 text-purple-700" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-2xl font-bold text-orange-700">
+                        {Math.round(teams.reduce((total, team) => total + (team.members?.length || team.memberCount || 0), 0) / (teams.length || 1))}
+                      </p>
+                      <p className="text-orange-600 font-medium">Avg Team Size</p>
+                    </div>
+                    <div className="h-12 w-12 bg-orange-200 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="h-6 w-6 text-orange-700" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Loading State */}
+            {teamsLoading && (
+              <div className="flex items-center justify-center py-12">
+                <LoadingSpinner size="lg" text="Loading teams..." />
+              </div>
+            )}
+
+            {/* Teams Grid - Modern Card Design */}
+            {!teamsLoading && teams.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                {teams.map((team) => (
+                  <div key={team.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                    {/* Team Header */}
+                    <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center">
-                      <FolderOpen className="h-6 w-6 text-primary-600 mr-3" />
+                        <div className="h-12 w-12 bg-gradient-to-r from-primary-100 to-primary-200 rounded-lg flex items-center justify-center mr-4">
+                          <FolderOpen className="h-6 w-6 text-primary-600" />
+                        </div>
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">{team.name}</h3>
-                        <p className="text-sm text-gray-500">{team.description}</p>
+                          <p className="text-sm text-gray-500 mt-1">{team.description || 'No description'}</p>
                       </div>
                     </div>
+                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                        team.isEnabled !== false 
+                          ? 'bg-green-100 text-green-800 border border-green-200' 
+                          : 'bg-red-100 text-red-800 border border-red-200'
+                      }`}>
+                        {team.isEnabled !== false ? '🟢 Active' : '🔴 Inactive'}
+                      </span>
                   </div>
-                  <div className="space-y-3 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Leader:</span>
-                      <span className="font-medium">{team.leader}</span>
+
+                    {/* Team Stats */}
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="bg-blue-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-lg font-bold text-blue-700">{team.members?.length || team.memberCount || 0}</p>
+                            <p className="text-blue-600 text-sm">Members</p>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Members:</span>
-                      <span className="font-medium">{team.members.length}</span>
+                          <Users className="h-5 w-5 text-blue-600" />
                     </div>
                   </div>
+                      <div className="bg-green-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-lg font-bold text-green-700">
+                              {team.createdAt ? new Date(team.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}
+                            </p>
+                            <p className="text-green-600 text-sm">Created</p>
+                          </div>
+                          <Calendar className="h-5 w-5 text-green-600" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Team Leader */}
+                    <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                      <div className="flex items-center">
+                        <div className="h-8 w-8 bg-primary-100 rounded-full flex items-center justify-center mr-3">
+                          <User className="h-4 w-4 text-primary-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Team Leader</p>
+                          <p className="font-medium text-gray-900">{team.leader || team.leaderName || 'No leader assigned'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Team Members Preview */}
                                      <div className="border-t border-gray-100 pt-4">
-                     <h4 className="text-sm font-medium text-gray-900 mb-3">Team Members</h4>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Team Members</h4>
+                        {team.members && team.members.length > 3 && (
+                          <span className="text-xs text-gray-500">+{team.members.length - 3} more</span>
+                        )}
+                      </div>
+                      
+                      {team.members && team.members.length > 0 ? (
                                            <div className="space-y-2">
-                        {team.members.map((member) => (
-                          <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded">
+                          {team.members.slice(0, 3).map((member) => (
+                            <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                             <div className="flex items-center">
-                              <User className="h-4 w-4 text-gray-400 mr-2" />
-                              <span className="text-sm text-gray-700">{member.name}</span>
+                                <div className="h-6 w-6 bg-primary-100 rounded-full flex items-center justify-center mr-2">
+                                  <User className="h-3 w-3 text-primary-600" />
                             </div>
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded ${getRoleColor(member.role)}`}>
+                                <span className="text-sm text-gray-700">
+                                  {member.name || `${member.firstName} ${member.lastName}` || 'Unknown Member'}
+                                </span>
+                              </div>
+                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded ${getRoleColor(member.role)}`}>
                               {member.role}
                             </span>
                           </div>
                         ))}
+                          {team.members.length > 3 && (
+                            <div className="text-center">
+                              <button className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+                                View all {team.members.length} members
+                              </button>
                       </div>
-                      <div className="mt-4 pt-3 border-t border-gray-100">
-                        <button
-                          onClick={() => {
-                            const newRequest = {
-                              id: Date.now(),
-                              userId: Date.now() + 1,
-                              userName: 'New User',
-                              userEmail: 'newuser@example.com',
-                              teamId: team.id,
-                              teamName: team.name,
-                              department: 'IT',
-                              role: 'Employee',
-                              requestDate: new Date().toISOString().split('T')[0],
-                              status: 'Pending',
-                              reason: `Requesting to join ${team.name}`
-                            }
-                            setApprovalRequests(prev => [...prev, newRequest])
-                          }}
-                          className="w-full btn-secondary flex items-center justify-center"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Request to Join Team
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-gray-500">
+                          <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm">No members assigned yet</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Team Actions */}
+                    <div className="mt-6 pt-4 border-t border-gray-100">
+                      <div className="flex space-x-2">
+                        <button className="flex-1 bg-primary-50 hover:bg-primary-100 text-primary-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors">
+                          View Details
+                        </button>
+                        <button className="flex-1 bg-green-50 hover:bg-green-100 text-green-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors">
+                          Join Team
                         </button>
                       </div>
                     </div>
                 </div>
               ))}
             </div>
+            )}
+
+            {/* Enhanced Empty State */}
+            {!teamsLoading && teams.length === 0 && (
+              <div className="text-center py-16">
+                <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-full w-32 h-32 flex items-center justify-center mx-auto mb-6">
+                  <Users2 className="h-16 w-16 text-gray-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">No teams found</h3>
+                <p className="text-gray-500 mb-8 max-w-md mx-auto text-lg">
+                  This organization doesn't have any teams yet. Create the first team to organize your members and improve collaboration.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <button
+                    onClick={() => setShowAddTeamModal(true)}
+                    className="btn-primary flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Team
+                  </button>
+                  <button
+                    onClick={fetchTeams}
+                    className="btn-secondary flex items-center"
+                  >
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Users Tab */}
         {activeTab === 'users' && (
           <div>
+             {/* Header with Stats */}
+             <div className="mb-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold">Users</h2>
+                 <div>
+                   <h2 className="text-2xl font-bold text-gray-900">Organization Users</h2>
+                   <p className="text-gray-600 mt-1">Manage and view all members in {organization.name}</p>
+                 </div>
+                 <div className="flex items-center space-x-3">
+                   <button
+                     onClick={fetchUsers}
+                     disabled={usersLoading}
+                     className="btn-secondary flex items-center"
+                     title="Refresh users"
+                   >
+                     <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                     </svg>
+                     Refresh
+                   </button>
               <button
                 onClick={() => setShowAddUserModal(true)}
                 className="btn-primary flex items-center"
@@ -708,63 +1020,169 @@ const OrganizationOverview = () => {
                 Add User
               </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {organization.users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+               </div>
+
+               {/* User Stats Cards */}
+               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-blue-700">{users.length}</p>
+                       <p className="text-blue-600 font-medium">Total Users</p>
+                     </div>
+                     <div className="h-12 w-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                       <Users className="h-6 w-6 text-blue-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-green-700">{users.filter(u => u.isEnabled).length}</p>
+                       <p className="text-green-600 font-medium">Active Users</p>
+                     </div>
+                     <div className="h-12 w-12 bg-green-200 rounded-lg flex items-center justify-center">
+                       <User className="h-6 w-6 text-green-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-purple-700">{new Set(users.map(u => u.role)).size}</p>
+                       <p className="text-purple-600 font-medium">Unique Roles</p>
+                     </div>
+                     <div className="h-12 w-12 bg-purple-200 rounded-lg flex items-center justify-center">
+                       <svg className="h-6 w-6 text-purple-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                       </svg>
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-orange-700">{new Set(users.map(u => u.positionTitle).filter(Boolean)).size}</p>
+                       <p className="text-orange-600 font-medium">Positions</p>
+                     </div>
+                     <div className="h-12 w-12 bg-orange-200 rounded-lg flex items-center justify-center">
+                       <Building2 className="h-6 w-6 text-orange-700" />
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             {/* Loading State */}
+             {usersLoading && (
+               <div className="flex items-center justify-center py-12">
+                 <LoadingSpinner size="lg" text="Loading users..." />
+               </div>
+             )}
+
+             {/* Users Grid View */}
+             {!usersLoading && users.length > 0 && (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {users.map((user) => (
+                   <div key={user.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                     {/* User Header */}
+                     <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center mr-3">
-                            <User className="h-5 w-5 text-primary-600" />
+                         <div className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center mr-3">
+                           {user.avatarURL ? (
+                             <img src={user.avatarURL} alt={user.firstName} className="h-12 w-12 rounded-full object-cover" />
+                           ) : (
+                             <User className="h-6 w-6 text-primary-600" />
+                           )}
                           </div>
                           <div>
-                            <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                            <div className="text-sm text-gray-500">{user.department}</div>
+                           <h3 className="text-lg font-semibold text-gray-900">
+                             {user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.name || 'Unknown User'}
+                           </h3>
+                           <p className="text-sm text-gray-500">{user.identified || user.email}</p>
                           </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {user.team || 'No Team'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(user.role)}`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                          user.status === 'Active' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {user.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          <button className="text-blue-600 hover:text-blue-900">
+                                               <div className="flex space-x-1">
+                          <button 
+                            onClick={() => handleEditUser(user)}
+                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Edit user"
+                          >
                             <Edit className="h-4 w-4" />
                           </button>
-                          <button className="text-red-600 hover:text-red-900">
+                          <button 
+                            onClick={() => handleDeleteUser(user.id, `${user.firstName} ${user.lastName}` || user.name || 'Unknown User')}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                            title="Delete user"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                     </div>
+
+                     {/* User Details */}
+                     <div className="space-y-3 mb-4">
+                       <div className="flex items-center text-sm">
+                         <Mail className="h-4 w-4 text-gray-400 mr-2" />
+                         <span className="text-gray-700">{user.email || 'No email'}</span>
+                       </div>
+                       
+                       <div className="flex items-center text-sm">
+                         <Phone className="h-4 w-4 text-gray-400 mr-2" />
+                         <span className="text-gray-700">{user.identified || 'No phone'}</span>
+                       </div>
+                       
+                       <div className="flex items-center text-sm">
+                         <Building2 className="h-4 w-4 text-gray-400 mr-2" />
+                         <span className="text-gray-700">{user.positionTitle || user.teamName || 'No position'}</span>
+                       </div>
+                     </div>
+
+                     {/* User Status and Role */}
+                     <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                       <div className="flex space-x-2">
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(user.role)}`}>
+                          {user.role}
+                        </span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                           user.isEnabled 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                           {user.isEnabled ? 'Active' : 'Inactive'}
+                        </span>
+                        </div>
+                       <div className="text-xs text-gray-500">
+                         {user.createdAt && new Date(user.createdAt).toLocaleDateString()}
+                       </div>
+                     </div>
+                   </div>
+                 ))}
             </div>
+             )}
+
+             {/* Empty State */}
+             {!usersLoading && users.length === 0 && (
+               <div className="text-center py-16">
+                 <div className="bg-gray-50 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
+                   <Users className="h-12 w-12 text-gray-400" />
+                 </div>
+                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No users found</h3>
+                 <p className="text-gray-500 mb-6 max-w-md mx-auto">
+                   This organization doesn't have any users yet. Start by adding the first member to your team.
+                 </p>
+                 <button
+                   onClick={() => setShowAddUserModal(true)}
+                   className="btn-primary flex items-center mx-auto"
+                 >
+                   <Plus className="h-4 w-4 mr-2" />
+                   Add First User
+                 </button>
+               </div>
+             )}
           </div>
                  )}
 
@@ -783,7 +1201,7 @@ const OrganizationOverview = () => {
              </div>
              
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {organization.documents?.map((document) => (
+               {documents.map((document) => (
                  <div key={document.id} className="border border-gray-200 rounded-lg p-6">
                    <div className="flex items-start justify-between mb-4">
                      <div className="flex items-center">
@@ -846,7 +1264,7 @@ const OrganizationOverview = () => {
                ))}
              </div>
              
-             {(!organization.documents || organization.documents.length === 0) && (
+             {(documents.length === 0) && (
                <div className="text-center py-12">
                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                  <p className="text-gray-500">No documents found.</p>
@@ -904,7 +1322,7 @@ const OrganizationOverview = () => {
                      required
                    >
                      <option value="">Select Author</option>
-                     {organization.users.filter(u => u.status === 'Active').map(user => (
+                  {users.filter(u => u.status === 'Active').map(user => (
                        <option key={user.id} value={user.name}>
                          {user.name} ({user.role})
                        </option>
@@ -957,96 +1375,241 @@ const OrganizationOverview = () => {
          {/* Approvals Tab */}
          {activeTab === 'approvals' && (
            <div>
+             {/* Header with Stats */}
+             <div className="mb-8">
              <div className="flex items-center justify-between mb-6">
-               <h2 className="text-xl font-semibold">Team Join Requests</h2>
-               <div className="flex space-x-2">
-                 <span className="text-sm text-gray-500">
-                   {approvalRequests.filter(r => r.status === 'Pending').length} pending
-                 </span>
+                 <div>
+                   <h2 className="text-2xl font-bold text-gray-900">Team Join Requests</h2>
+                   <p className="text-gray-600 mt-1">Manage team membership requests for {organization.name}</p>
+                 </div>
+                 <div className="flex items-center space-x-3">
+                   <button
+                     onClick={fetchApprovalRequests}
+                     disabled={approvalRequestsLoading}
+                     className="btn-secondary flex items-center"
+                     title="Refresh requests"
+                   >
+                     <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                     </svg>
+                     Refresh
+                   </button>
                </div>
              </div>
              
-             <div className="space-y-4">
+               {/* Request Stats Cards */}
+               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-blue-700">{approvalRequests.length}</p>
+                       <p className="text-blue-600 font-medium">Total Requests</p>
+                     </div>
+                     <div className="h-12 w-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                       <Eye className="h-6 w-6 text-blue-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-yellow-700">{approvalRequests.filter(r => r.status === 'Pending').length}</p>
+                       <p className="text-yellow-600 font-medium">Pending</p>
+                     </div>
+                     <div className="h-12 w-12 bg-yellow-200 rounded-lg flex items-center justify-center">
+                       <Clock className="h-6 w-6 text-yellow-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-green-700">{approvalRequests.filter(r => r.status === 'Approved').length}</p>
+                       <p className="text-green-600 font-medium">Approved</p>
+                     </div>
+                     <div className="h-12 w-12 bg-green-200 rounded-lg flex items-center justify-center">
+                       <CheckCircle className="h-6 w-6 text-green-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-red-700">{approvalRequests.filter(r => r.status === 'Rejected').length}</p>
+                       <p className="text-red-600 font-medium">Rejected</p>
+                     </div>
+                     <div className="h-12 w-12 bg-red-200 rounded-lg flex items-center justify-center">
+                       <XCircle className="h-6 w-6 text-red-700" />
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             {/* Loading State */}
+             {approvalRequestsLoading && (
+               <div className="flex items-center justify-center py-12">
+                 <LoadingSpinner size="lg" text="Loading approval requests..." />
+               </div>
+             )}
+
+             {/* Requests List */}
+             {!approvalRequestsLoading && approvalRequests.length > 0 && (
+               <div className="space-y-6">
                {approvalRequests.map((request) => (
-                 <div key={request.id} className="border border-gray-200 rounded-lg p-6">
-                   <div className="flex items-start justify-between mb-4">
+                   <div key={request.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                     {/* Request Header */}
+                     <div className="flex items-start justify-between mb-6">
                      <div className="flex items-center">
-                       <User className="h-8 w-8 text-primary-600 mr-3" />
+                         <div className="h-12 w-12 bg-gradient-to-r from-primary-100 to-primary-200 rounded-lg flex items-center justify-center mr-4">
+                           <User className="h-6 w-6 text-primary-600" />
+                         </div>
                        <div>
-                         <h3 className="text-lg font-semibold text-gray-900">{request.userName}</h3>
-                         <p className="text-sm text-gray-500">{request.userEmail}</p>
-                         <p className="text-sm text-gray-500">{request.department} • {request.role}</p>
+                           <h3 className="text-lg font-semibold text-gray-900">
+                             {request.user?.firstName} {request.user?.lastName}
+                           </h3>
+                           <p className="text-sm text-gray-500">{request.user?.identified}</p>
+                           <p className="text-sm text-gray-500">{request.user?.positionTitle} • {request.user?.role}</p>
                        </div>
                      </div>
                      <div className="flex items-center space-x-2">
-                       <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                         <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${
                          request.status === 'Pending' 
-                           ? 'bg-yellow-100 text-yellow-800' 
+                             ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' 
                            : request.status === 'Approved'
-                           ? 'bg-green-100 text-green-800'
-                           : 'bg-red-100 text-red-800'
+                             ? 'bg-green-100 text-green-800 border border-green-200'
+                             : 'bg-red-100 text-red-800 border border-red-200'
                        }`}>
-                         {request.status}
+                           {request.status === 'Pending' ? '⏳ Pending' : 
+                            request.status === 'Approved' ? '✅ Approved' : '❌ Rejected'}
                        </span>
                      </div>
                    </div>
                    
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                     {/* Request Details */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                       <div className="bg-blue-50 rounded-lg p-4">
+                         <div className="flex items-center justify-between">
                      <div>
-                       <h4 className="text-sm font-medium text-gray-900 mb-2">Requesting to Join</h4>
-                       <div className="flex items-center">
-                         <Users2 className="h-4 w-4 text-green-600 mr-2" />
-                         <span className="text-sm text-gray-700">{request.teamName}</span>
+                             <p className="text-sm text-blue-600 font-medium">Join Date</p>
+                             <p className="text-lg font-bold text-blue-700">
+                               {request.joinedAt ? new Date(request.joinedAt).toLocaleDateString('en-US', { 
+                                 year: 'numeric', 
+                                 month: 'short', 
+                                 day: 'numeric',
+                                 hour: '2-digit',
+                                 minute: '2-digit'
+                               }) : 'N/A'}
+                             </p>
                        </div>
+                           <Calendar className="h-5 w-5 text-blue-600" />
                      </div>
+                       </div>
+                       
+                       {request.status !== 'Pending' && (
+                         <div className="bg-green-50 rounded-lg p-4">
+                           <div className="flex items-center justify-between">
                      <div>
-                       <h4 className="text-sm font-medium text-gray-900 mb-2">Request Date</h4>
-                       <span className="text-sm text-gray-700">{new Date(request.requestDate).toLocaleDateString()}</span>
+                               <p className="text-sm text-green-600 font-medium">Approved Date</p>
+                               <p className="text-lg font-bold text-green-700">
+                                 {request.approvedAt && request.approvedAt !== '0001-01-01T00:00:00Z' 
+                                   ? new Date(request.approvedAt).toLocaleDateString('en-US', { 
+                                       year: 'numeric', 
+                                       month: 'short', 
+                                       day: 'numeric',
+                                       hour: '2-digit',
+                                       minute: '2-digit'
+                                     })
+                                   : 'N/A'}
+                               </p>
                      </div>
+                             <CheckCircle className="h-5 w-5 text-green-600" />
+                           </div>
+                         </div>
+                       )}
                    </div>
                    
-                   <div className="mb-4">
-                     <h4 className="text-sm font-medium text-gray-900 mb-2">Reason</h4>
-                     <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded">{request.reason}</p>
+                     {/* Approval Information */}
+                     {request.status !== 'Pending' && request.approvedByName && (
+                       <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                         <div className="flex items-center">
+                           <div className="h-8 w-8 bg-primary-100 rounded-full flex items-center justify-center mr-3">
+                             <User className="h-4 w-4 text-primary-600" />
                    </div>
-                   
+                           <div>
+                             <p className="text-sm text-gray-500">Approved by</p>
+                             <p className="font-medium text-gray-900">{request.approvedByName}</p>
+                           </div>
+                         </div>
+                       </div>
+                     )}
+                     
+                     {/* Action Buttons */}
                    {request.status === 'Pending' && (
                      <div className="flex space-x-3 pt-4 border-t border-gray-100">
                        <button
                          onClick={() => handleApproval(request.id, 'Approved')}
-                         className="btn-primary flex items-center"
+                           className="flex-1 bg-green-50 hover:bg-green-100 text-green-700 py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
                        >
-                         <Eye className="h-4 w-4 mr-2" />
-                         Approve
+                           <CheckCircle className="h-4 w-4 mr-2" />
+                           Approve Request
                        </button>
                        <button
                          onClick={() => handleApproval(request.id, 'Rejected')}
-                         className="btn-secondary flex items-center"
+                           className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
                        >
-                         <X className="h-4 w-4 mr-2" />
-                         Reject
+                           <XCircle className="h-4 w-4 mr-2" />
+                           Reject Request
                        </button>
                      </div>
                    )}
                    
                    {request.status !== 'Pending' && (
                      <div className="pt-4 border-t border-gray-100">
-                       <p className="text-sm text-gray-500">
-                         {request.status === 'Approved' ? '✅ Request approved' : '❌ Request rejected'}
-                       </p>
+                         <div className="flex items-center">
+                           {request.status === 'Approved' ? (
+                             <>
+                               <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                               <p className="text-sm text-green-600 font-medium">Request has been approved</p>
+                             </>
+                           ) : (
+                             <>
+                               <XCircle className="h-5 w-5 text-red-600 mr-2" />
+                               <p className="text-sm text-red-600 font-medium">Request has been rejected</p>
+                             </>
+                           )}
+                         </div>
                      </div>
                    )}
                  </div>
                ))}
-               
-               {approvalRequests.length === 0 && (
-                 <div className="text-center py-12">
-                   <Eye className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                   <p className="text-gray-500">No approval requests found.</p>
-                   <p className="text-sm text-gray-400 mt-2">Team join requests will appear here.</p>
                  </div>
                )}
+             
+             {/* Enhanced Empty State */}
+             {!approvalRequestsLoading && approvalRequests.length === 0 && (
+               <div className="text-center py-16">
+                 <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-full w-32 h-32 flex items-center justify-center mx-auto mb-6">
+                   <Eye className="h-16 w-16 text-gray-400" />
              </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-3">No approval requests found</h3>
+                 <p className="text-gray-500 mb-8 max-w-md mx-auto text-lg">
+                   There are currently no team join requests pending approval. New requests will appear here when users request to join teams.
+                 </p>
+                 <button
+                   onClick={fetchApprovalRequests}
+                   className="btn-secondary flex items-center mx-auto"
+                 >
+                   <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                   </svg>
+                   Refresh
+                 </button>
+               </div>
+             )}
            </div>
          )}
        </div>
@@ -1086,7 +1649,7 @@ const OrganizationOverview = () => {
                   required
                 >
                   <option value="">Select Team Leader</option>
-                  {organization.users.filter(u => u.status === 'Active').map(user => (
+                  {users.filter(u => u.status === 'Active').map(user => (
                     <option key={user.id} value={user.name}>
                       {user.name} ({user.role})
                     </option>
@@ -1195,7 +1758,7 @@ const OrganizationOverview = () => {
                     className="input-field"
                   >
                     <option value="">Select Team</option>
-                    {organization.teams.map(team => (
+                    {teams.map(team => (
                       <option key={team.id} value={team.name}>{team.name}</option>
                     ))}
                   </select>
@@ -1216,6 +1779,126 @@ const OrganizationOverview = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddUserModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditUserModal && editingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-semibold mb-4">Edit User: {editingUser.firstName} {editingUser.lastName}</h2>
+            <form onSubmit={handleUpdateUser} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <input
+                    type="text"
+                    value={userFormData.firstName}
+                    onChange={(e) => setUserFormData({...userFormData, firstName: e.target.value})}
+                    className="input-field"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    value={userFormData.lastName}
+                    onChange={(e) => setUserFormData({...userFormData, lastName: e.target.value})}
+                    className="input-field"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                  <select
+                    value={userFormData.gender}
+                    onChange={(e) => setUserFormData({...userFormData, gender: e.target.value})}
+                    className="input-field"
+                    required
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={userFormData.dob}
+                    onChange={(e) => setUserFormData({...userFormData, dob: e.target.value})}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <select
+                    value={userFormData.role}
+                    onChange={(e) => setUserFormData({...userFormData, role: e.target.value})}
+                    className="input-field"
+                    required
+                  >
+                    <option value="AdminOrganization">Admin Organization</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Member">Member</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
+                  <select
+                    value={userFormData.teamId}
+                    onChange={(e) => setUserFormData({...userFormData, teamId: e.target.value})}
+                    className="input-field"
+                    disabled={teamsLoading}
+                  >
+                    <option value="">
+                      {teamsLoading ? 'Loading teams...' : 'Select Team'}
+                    </option>
+                    {!teamsLoading && teams.map(team => (
+                      <option key={team.id} value={team.id}>{team.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Position ID</label>
+                <input
+                  type="text"
+                  value={userFormData.positionId}
+                  onChange={(e) => setUserFormData({...userFormData, positionId: e.target.value})}
+                  className="input-field"
+                  placeholder="Enter position ID"
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="btn-primary flex-1">Update User</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditUserModal(false)
+                    setEditingUser(null)
+                    setUserFormData({
+                      firstName: '',
+                      lastName: '',
+                      gender: 'Male',
+                      dob: '',
+                      role: 'Member',
+                      teamId: '',
+                      positionId: ''
+                    })
+                  }}
                   className="btn-secondary flex-1"
                 >
                   Cancel
