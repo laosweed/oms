@@ -54,12 +54,28 @@ export const AuthProvider = ({ children }) => {
             refreshToken: tokenData.refreshToken,
             avatarURL: userData.avatarURL,
             isEnabled: userData.isEnabled,
-            positionTitle: userData.positionTitle,
-            teamName: userData.teamName
+            gender: userData.gender,
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            dob: userData.dob,
+            position: userData.position,
+            team: userData.team,
+            joinOrganization: userData.joinOrganization,
+            createdAt: userData.createdAt,
+            updatedAt: userData.updatedAt,
+            // Extract organization details from joinOrganization
+            organizationId: userData.joinOrganization?.organization?.id || null,
+            organizationCode: userData.joinOrganization?.organization?.code || null,
+            organizationName: userData.joinOrganization?.organization?.name || null,
+            organizationEmail: userData.joinOrganization?.organization?.email || null,
+            organizationPhone: userData.joinOrganization?.organization?.phone || null,
+            organizationDescription: userData.joinOrganization?.organization?.description || null,
+            statusJoinedOrganization: userData.statusJoinedOrganization
           }
           
           setUser(userInfo)
           localStorage.setItem('user', JSON.stringify(userInfo))
+          
           return { success: true }
         } else {
           return { success: false, error: result?.serviceResult?.message || 'Login failed' }
@@ -108,11 +124,49 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  const fetchUserOrganization = async () => {
+    if (!user?.token) return null
+    
+    try {
+      const response = await fetch('http://10.0.100.19:9904/api/v1/users/profile', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json',
+        }
+      })
+
+      const data = await response.json()
+      
+      if (response.ok && data.result?.serviceResult?.code === 200) {
+        const userData = data.result.data.user
+        const updatedUser = {
+          ...user,
+          // Extract organization details from joinOrganization
+          organizationId: userData.joinOrganization?.organization?.id || null,
+          organizationCode: userData.joinOrganization?.organization?.code || null,
+          organizationName: userData.joinOrganization?.organization?.name || null,
+          organizationEmail: userData.joinOrganization?.organization?.email || null,
+          organizationPhone: userData.joinOrganization?.organization?.phone || null,
+          organizationDescription: userData.joinOrganization?.organization?.description || null
+        }
+        setUser(updatedUser)
+        localStorage.setItem('user', JSON.stringify(updatedUser))
+        return updatedUser
+      }
+      return null
+    } catch (error) {
+      console.error('Error fetching user organization:', error)
+      return null
+    }
+  }
+
   const value = {
     user,
     login,
     logout,
     refreshToken,
+    fetchUserOrganization,
     loading
   }
 

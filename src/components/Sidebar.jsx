@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { 
   LayoutDashboard, 
@@ -16,15 +16,65 @@ import { useAuth } from '../contexts/AuthContext'
 
 const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(false)
-  const { user, logout } = useAuth()
+  const [isLoadingOrg, setIsLoadingOrg] = useState(false)
+  const { user, logout, fetchUserOrganization } = useAuth()
 
-  const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Organizations', href: '/organizations', icon: Building2 },
-    { name: 'Users', href: '/users', icon: Users },
-    { name: 'Projects', href: '/projects', icon: FolderOpen },
-    { name: 'Documents', href: '/documents', icon: FileText },
-  ]
+  // Fetch user organization details if user has Organization role but no organization code
+  useEffect(() => {
+    if (user && (user.role === 'Organization' || user.role === 'AdminOrganization') && !user.organizationCode) {
+      setIsLoadingOrg(true)
+      fetchUserOrganization().finally(() => setIsLoadingOrg(false))
+    }
+  }, [user, fetchUserOrganization])
+
+  // Determine navigation based on user role
+  const getNavigation = () => {
+    const baseNavigation = [
+      { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { name: 'Users', href: '/users', icon: Users },
+      { name: 'Projects', href: '/projects', icon: FolderOpen },
+      { name: 'Documents', href: '/documents', icon: FileText },
+    ]
+
+    // If user has Organization role, show organization details instead of management
+    if (user?.role === 'Organization' || user?.role === 'AdminOrganization') {
+      // Use organization code from the API response
+      const orgCode = user.organizationCode || user.organizationId || 'default'
+    
+      return [
+        { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+        { 
+          name: isLoadingOrg ? 'Loading...' : 'Organization Details', 
+          href: `/organizations/${orgCode}`, 
+          icon: Building2,
+          disabled: isLoadingOrg
+        },
+        { name: 'Users', href: '/users', icon: Users },
+        { name: 'Projects', href: '/projects', icon: FolderOpen },
+        { name: 'Documents', href: '/documents', icon: FileText },
+      ]
+    }
+
+    // For regular users, show limited navigation
+    if (user?.role === 'Member' || user?.role === 'Approved') {
+      return [
+        { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+        { name: 'Projects', href: '/projects', icon: FolderOpen },
+        { name: 'Documents', href: '/documents', icon: FileText },
+      ]
+    }
+
+    // Default navigation includes organization management (for Admin users)
+    return [
+      { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { name: 'Organizations', href: '/organizations', icon: Building2 },
+      { name: 'Users', href: '/users', icon: Users },
+      { name: 'Projects', href: '/projects', icon: FolderOpen },
+      { name: 'Documents', href: '/documents', icon: FileText },
+    ]
+  }
+
+  const navigation = getNavigation()
 
   return (
     <>
@@ -54,15 +104,23 @@ const Sidebar = () => {
               return (
                 <NavLink
                   key={item.name}
-                  to={item.href}
+                  to={item.disabled ? '#' : item.href}
                   className={({ isActive }) =>
                     `group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
-                      isActive
+                      item.disabled
+                        ? 'text-gray-400 cursor-not-allowed'
+                        : isActive
                         ? 'bg-primary-100 text-primary-700 border-r-2 border-primary-600'
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                     }`
                   }
-                  onClick={() => setIsOpen(false)}
+                  onClick={(e) => {
+                    if (item.disabled) {
+                      e.preventDefault()
+                      return
+                    }
+                    setIsOpen(false)
+                  }}
                 >
                   <Icon className="mr-3 h-5 w-5" />
                   {item.name}
@@ -80,7 +138,7 @@ const Sidebar = () => {
             </div>
                          <div className="flex-1 min-w-0">
                <p className="text-sm font-medium text-gray-900 truncate">
-                 {user?.name || 'User'}
+                 {user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'User'}
                </p>
                <div className="flex items-center space-x-2">
                  <p className="text-xs text-gray-500 truncate">
@@ -92,6 +150,11 @@ const Sidebar = () => {
                    </span>
                  )}
                </div>
+               {user?.position?.name && (
+                 <p className="text-xs text-gray-400 truncate">
+                   {user.position.name}
+                 </p>
+               )}
              </div>
           </div>
           <button

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApi } from '../utils/api'
+import { useAuth } from '../contexts/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { 
   ArrowLeft,
@@ -31,6 +32,7 @@ import {
 
 const OrganizationOverview = () => {
   const { id } = useParams() // This will be the organization code
+  const { user } = useAuth() // Get current user for authorization
   const navigate = useNavigate()
   const api = useApi()
   const [organization, setOrganization] = useState(null)
@@ -71,6 +73,13 @@ const OrganizationOverview = () => {
   // Approval requests data
   const [approvalRequests, setApprovalRequests] = useState([])
   const [approvalRequestsLoading, setApprovalRequestsLoading] = useState(false)
+  
+  // Position selection modal for approval
+  const [showPositionModal, setShowPositionModal] = useState(false)
+  const [selectedPosition, setSelectedPosition] = useState('')
+  const [pendingApproval, setPendingApproval] = useState(null)
+  const [positions, setPositions] = useState([])
+  const [positionsLoading, setPositionsLoading] = useState(false)
 
   // Fetch organization data from API
   useEffect(() => {
@@ -97,6 +106,13 @@ const OrganizationOverview = () => {
       fetchApprovalRequests()
     }
   }, [activeTab, id])
+
+  // Fetch positions when position modal is opened
+  useEffect(() => {
+    if (showPositionModal && pendingApproval) {
+      fetchPositions()
+    }
+  }, [showPositionModal, pendingApproval])
 
   const fetchOrganization = async () => {
     try {
@@ -174,11 +190,11 @@ const OrganizationOverview = () => {
   const fetchApprovalRequests = async () => {
     try {
       setApprovalRequestsLoading(true)
-      const response = await api.get(`http://10.0.100.19:9904/api/v1/teams/${id}/org`)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/organizations/user/${id}/joinRequest`)
       
       if (response.ok) {
         const data = await response.json()
-        const joinRequestsData = data.result?.data?.joinRequests || []
+        const joinRequestsData = data.result?.data?.joinRequests || data.result?.data || []
         setApprovalRequests(joinRequestsData)
       } else {
         console.error('Failed to fetch approval requests')
@@ -187,6 +203,38 @@ const OrganizationOverview = () => {
       console.error('Error fetching approval requests:', error)
     } finally {
       setApprovalRequestsLoading(false)
+    }
+  }
+
+  const fetchPositions = async () => {
+    try {
+      setPositionsLoading(true)
+      
+      // Get team ID from the pending approval request
+      const teamId = pendingApproval?.requestData?.user?.team?.id || pendingApproval?.requestData?.teamId
+      
+      console.log(pendingApproval);
+
+      console.log('Fetching positions for team ID:', teamId)
+      console.log('Pending approval data:', pendingApproval?.requestData)
+      
+   
+      
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/positions/${teamId}/team`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const positionsData = data.result?.data?.positions || data.result?.data || []
+        setPositions(positionsData)
+      } else {
+        console.error('Failed to fetch positions')
+        setPositions([])
+      }
+    } catch (error) {
+      console.error('Error fetching positions:', error)
+      setPositions([])
+    } finally {
+      setPositionsLoading(false)
     }
   }
 
@@ -318,22 +366,114 @@ const OrganizationOverview = () => {
     }
   }
 
-  const handleApproval = async (requestId, status) => {
-    try {
-      // TODO: Implement API call to approve/reject request
-      // const response = await api.put(`http://10.0.100.19:9904/api/v1/teams/${id}/approve/${requestId}`, { status })
+  const handleApproval = async (requestId, status, userName, requestData) => {
+    if (status === 'Approved') {
+      // Check if user has a team but no position assigned
+      const hasTeam = requestData.user?.team?.id
+      const hasPosition = requestData.user?.position?.id
       
-      // For now, update local state
-      setApprovalRequests(prev => 
-        prev.map(request => 
-          request.id === requestId 
-            ? { ...request, status: status }
-            : request
+      if (hasTeam && !hasPosition) {
+        // For approval with team but no position, show position selection modal
+        setPendingApproval({ requestId, status, userName, requestData })
+        setShowPositionModal(true)
+        return
+      } else {
+        // For approval with existing team and position, proceed directly
+        const confirmed = window.confirm(
+          `Are you sure you want to approve the join request from "${userName}"?`
         )
-      )
+        
+        if (!confirmed) return
+        
+        await submitApproval(requestId, status, requestData)
+        return
+      }
+    }
+    
+    // For rejection, proceed directly
+    const confirmed = window.confirm(
+      `Are you sure you want to reject the join request from "${userName}"?`
+    )
+    
+    if (!confirmed) return
+    
+    await submitApproval(requestId, status, requestData)
+  }
+
+  const submitApproval = async (requestId, status, requestData, selectedPositionId = null) => {
+    try {
+      let response
+      
+      if (status === 'Approved') {
+        // For approval, use the specific endpoint with user, position, and team IDs
+        const requestBody = {
+          userId: requestData.user?.id || requestData.userId,
+          positionId: selectedPositionId || requestData.user?.position?.id || requestData.positionId,
+          teamId: requestData.user?.team?.id || requestData.teamId
+        }
+        
+        // Validate that all required IDs are present
+        if (!requestBody.userId || !requestBody.positionId || !requestBody.teamId) {
+          alert('Missing required data for approval. Please ensure user, position, and team information is available.')
+          console.error('Missing IDs for approval:', requestBody)
+          return
+        }
+        
+        // Log the request body for debugging
+        console.log('Approval Request Body:', JSON.stringify(requestBody, null, 2))
+        
+        response = await api.put(`http://10.0.100.19:9904/api/v1/organizations/approved/${id}`, requestBody)
+      } else {
+        // For rejection, use the new endpoint with user ID
+        const userId = requestData.user?.id || requestData.userId
+        
+        if (!userId) {
+          alert('Missing user ID for rejection.')
+          console.error('Missing user ID for rejection:', requestData)
+          return
+        }
+        
+        // Log the rejection request for debugging
+        console.log('Rejection Request - User ID:', userId)
+        
+        response = await api.put(`http://10.0.100.19:9904/api/v1/organizations/reject/${id}/user/${userId}`)
+      }
+      
+      if (response.ok) {
+        // Refresh the approval requests list
+        await fetchApprovalRequests()
+        alert(`Request has been ${status.toLowerCase()} successfully.`)
+        
+        // Close position modal if it was open
+        if (showPositionModal) {
+          setShowPositionModal(false)
+          setSelectedPosition('')
+          setPendingApproval(null)
+        }
+      } else {
+        const errorData = await response.json()
+        alert(errorData.message || `Failed to ${status.toLowerCase()} request`)
+      }
     } catch (error) {
       console.error('Error updating approval status:', error)
+      alert('Network error. Please try again.')
     }
+  }
+
+  const handlePositionSubmit = async () => {
+    if (!selectedPosition) {
+      alert('Please select a position before approving.')
+      return
+    }
+    
+    if (!pendingApproval) return
+    
+    await submitApproval(
+      pendingApproval.requestId, 
+      pendingApproval.status, 
+      pendingApproval.requestData, 
+      selectedPosition
+    )
   }
 
   const handleAddDocument = (e) => {
@@ -468,53 +608,7 @@ const OrganizationOverview = () => {
       </div>
 
       {/* Organization Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="card">
-          <div className="flex items-center">
-            <Users className="h-8 w-8 text-blue-600 mr-3" />
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{users.length}</p>
-              <p className="text-sm text-gray-500">Total Users</p>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="flex items-center">
-            <Users2 className="h-8 w-8 text-green-600 mr-3" />
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{teams.length}</p>
-              <p className="text-sm text-gray-500">Teams</p>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="flex items-center">
-            <TrendingUp className="h-8 w-8 text-purple-600 mr-3" />
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{users.filter(u => u.status === 'Active').length}</p>
-              <p className="text-sm text-gray-500">Active Users</p>
-            </div>
-          </div>
-        </div>
-                 <div className="card">
-           <div className="flex items-center">
-             <Building2 className="h-8 w-8 text-orange-600 mr-3" />
-             <div>
-               <p className="text-2xl font-bold text-gray-900">{new Set(users.map(u => u.department)).size}</p>
-               <p className="text-sm text-gray-500">Departments</p>
-             </div>
-           </div>
-         </div>
-         <div className="card">
-           <div className="flex items-center">
-             <FileText className="h-8 w-8 text-indigo-600 mr-3" />
-             <div>
-               <p className="text-2xl font-bold text-gray-900">{documents.length}</p>
-               <p className="text-sm text-gray-500">Documents</p>
-             </div>
-           </div>
-         </div>
-      </div>
+
 
       {/* Tabs */}
       <div className="mb-6">
@@ -1469,10 +1563,17 @@ const OrganizationOverview = () => {
                          </div>
                        <div>
                            <h3 className="text-lg font-semibold text-gray-900">
-                             {request.user?.firstName} {request.user?.lastName}
+                             {request.user?.firstName || request.firstName} {request.user?.lastName || request.lastName}
                            </h3>
-                           <p className="text-sm text-gray-500">{request.user?.identified}</p>
-                           <p className="text-sm text-gray-500">{request.user?.positionTitle} • {request.user?.role}</p>
+                           <p className="text-sm text-gray-500">{request.user?.identified || request.identified}</p>
+                           <p className="text-sm text-gray-500">
+                             {request.user?.position?.name || request.position?.name || 'No position'} • {request.user?.role || request.role}
+                           </p>
+                           {request.user?.team?.name && (
+                             <p className="text-sm text-blue-600 font-medium">
+                               Team: {request.user.team.name}
+                             </p>
+                           )}
                        </div>
                      </div>
                      <div className="flex items-center space-x-2">
@@ -1551,14 +1652,14 @@ const OrganizationOverview = () => {
                    {request.status === 'Pending' && (
                      <div className="flex space-x-3 pt-4 border-t border-gray-100">
                        <button
-                         onClick={() => handleApproval(request.id, 'Approved')}
+                         onClick={() => handleApproval(request.id, 'Approved', `${request.user?.firstName || request.firstName} ${request.user?.lastName || request.lastName}`, request)}
                            className="flex-1 bg-green-50 hover:bg-green-100 text-green-700 py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
                        >
                            <CheckCircle className="h-4 w-4 mr-2" />
                            Approve Request
                        </button>
                        <button
-                         onClick={() => handleApproval(request.id, 'Rejected')}
+                         onClick={() => handleApproval(request.id, 'Rejected', `${request.user?.firstName || request.firstName} ${request.user?.lastName || request.lastName}`, request)}
                            className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
                        >
                            <XCircle className="h-4 w-4 mr-2" />
@@ -1905,6 +2006,73 @@ const OrganizationOverview = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Position Selection Modal for Approval */}
+      {showPositionModal && pendingApproval && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-semibold mb-4">Select Position for Approval</h2>
+            <div className="mb-6">
+              <p className="text-gray-600 mb-4">
+                Approving join request for: <strong>{pendingApproval.userName}</strong>
+              </p>
+              <p className="text-sm text-gray-500 mb-2">
+                Please select a position for this user before approving their request.
+              </p>
+              {pendingApproval.requestData?.user?.team?.name && (
+                <p className="text-sm text-blue-600 font-medium">
+                  Team: {pendingApproval.requestData.user.team.name}
+                </p>
+              )}
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Position *
+              </label>
+              {positionsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <LoadingSpinner size="sm" text="Loading positions..." />
+                </div>
+              ) : (
+                <select
+                  value={selectedPosition}
+                  onChange={(e) => setSelectedPosition(e.target.value)}
+                  className="input-field w-full"
+                  required
+                >
+                  <option value="">Select a position</option>
+                  {positions.map(position => (
+                    <option key={position.id} value={position.id}>
+                      {position.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={handlePositionSubmit}
+                disabled={!selectedPosition || positionsLoading}
+                className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Approve Request
+              </button>
+              <button
+                onClick={() => {
+                  setShowPositionModal(false)
+                  setSelectedPosition('')
+                  setPendingApproval(null)
+                }}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
