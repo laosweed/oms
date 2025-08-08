@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useApi } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
+import Swal from 'sweetalert2/dist/sweetalert2.js'
+import 'sweetalert2/dist/sweetalert2.css'
 import { 
   ArrowLeft,
   Building2,
@@ -27,7 +29,21 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Circle,
+  CircleDot,
+  Zap,
+  Activity,
+  Settings,
+  Shield,
+  Bell,
+  Lock,
+  Globe,
+  Database,
+  Palette,
+  Key,
+  Folder,
+  Tag
 } from 'lucide-react'
 
 const OrganizationOverview = () => {
@@ -42,17 +58,20 @@ const OrganizationOverview = () => {
   const [teamsLoading, setTeamsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('details')
   const [showAddTeamModal, setShowAddTeamModal] = useState(false)
+  const [showEditTeamModal, setShowEditTeamModal] = useState(false)
+  const [editingTeam, setEditingTeam] = useState(null)
   const [showAddUserModal, setShowAddUserModal] = useState(false)
   const [showEditUserModal, setShowEditUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [teamFormData, setTeamFormData] = useState({
     name: '',
-    description: '',
-    leader: ''
+    description: ''
   })
   const [userFormData, setUserFormData] = useState({
     firstName: '',
     lastName: '',
+    email: '',
+    phone: '',
     gender: 'Male',
     dob: '',
     role: 'Member',
@@ -80,6 +99,64 @@ const OrganizationOverview = () => {
   const [pendingApproval, setPendingApproval] = useState(null)
   const [positions, setPositions] = useState([])
   const [positionsLoading, setPositionsLoading] = useState(false)
+  const [teamsWithMembers, setTeamsWithMembers] = useState(new Set())
+
+  // Settings state
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [settingsFormData, setSettingsFormData] = useState({
+    name: '',
+    description: '',
+    email: '',
+    phone: '',
+    address: '',
+    websiteURL: '',
+    isEnabled: true,
+    allowPublicRegistration: false,
+    requireEmailVerification: true,
+    requireAdminApproval: true,
+    maxTeamSize: 50,
+    allowDocumentUpload: true,
+    allowTeamCreation: true,
+    sessionTimeout: 30,
+    passwordPolicy: {
+      minLength: 8,
+      requireUppercase: true,
+      requireLowercase: true,
+      requireNumbers: true,
+      requireSpecialChars: true
+    },
+    notificationSettings: {
+      emailNotifications: true,
+      teamJoinRequests: true,
+      documentUpdates: true,
+      userActivity: false
+    }
+  })
+
+  // Position Management state
+  const [showPositionManagementModal, setShowPositionManagementModal] = useState(false)
+  const [showAddPositionModal, setShowAddPositionModal] = useState(false)
+  const [showEditPositionModal, setShowEditPositionModal] = useState(false)
+  const [editingPosition, setEditingPosition] = useState(null)
+  const [allPositions, setAllPositions] = useState([])
+  const [allPositionsLoading, setAllPositionsLoading] = useState(false)
+  const [positionFormData, setPositionFormData] = useState({
+    name: '',
+    description: '',
+    teamId: ''
+  })
+
+  // Document Categories state
+  const [docCategories, setDocCategories] = useState([])
+  const [documentCategoriesLoading, setDocumentCategoriesLoading] = useState(false)
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState(false)
+  const [editingCategory, setEditingCategory] = useState(null)
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    description: '',
+    color: '#3B82F6'
+  })
 
   // Fetch organization data from API
   useEffect(() => {
@@ -104,6 +181,13 @@ const OrganizationOverview = () => {
   useEffect(() => {
     if (activeTab === 'approvals') {
       fetchApprovalRequests()
+    }
+  }, [activeTab, id])
+
+  // Fetch document categories when Document Categories tab is selected
+  useEffect(() => {
+    if (activeTab === 'documentCategories') {
+      fetchDocumentCategories()
     }
   }, [activeTab, id])
 
@@ -206,6 +290,27 @@ const OrganizationOverview = () => {
     }
   }
 
+  const fetchDocumentCategories = async () => {
+    try {
+      setDocumentCategoriesLoading(true)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/docCategories/${id}/org`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const categoriesData = data.result?.data?.docCategories || data.result?.data || []
+        setDocCategories(categoriesData)
+      } else {
+        console.error('Failed to fetch document categories')
+        setDocCategories([])
+      }
+    } catch (error) {
+      console.error('Error fetching document categories:', error)
+      setDocCategories([])
+    } finally {
+      setDocumentCategoriesLoading(false)
+    }
+  }
+
   const fetchPositions = async () => {
     try {
       setPositionsLoading(true)
@@ -238,25 +343,102 @@ const OrganizationOverview = () => {
     }
   }
 
-  const handleAddTeam = (e) => {
-    e.preventDefault()
-    const newTeam = {
-      id: Date.now(),
-      ...teamFormData,
-      members: []
+  const fetchPositionsForTeam = async (teamId) => {
+    try {
+      setPositionsLoading(true)
+      
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/positions/${teamId}/team`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const positionsData = data.result?.data?.positions || data.result?.data || []
+        setPositions(positionsData)
+      } else {
+        console.error('Failed to fetch positions for team')
+        setPositions([])
+      }
+    } catch (error) {
+      console.error('Error fetching positions for team:', error)
+      setPositions([])
+    } finally {
+      setPositionsLoading(false)
     }
+  }
+
+  const fetchTeamMembers = async (teamId) => {
+    try {
+      setTeamsLoading(true)
+      
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/teams/${teamId}/members`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const membersData = data.result?.data?.members || data.result?.data || []
+        
+        // Update the specific team with its members
+        setOrganization(prev => ({
+          ...prev,
+          teams: prev.teams.map(team => 
+            team.id === teamId 
+              ? { ...team, users: membersData }
+              : team
+          )
+        }))
+        
+        // Mark this team as having members loaded
+        setTeamsWithMembers(prev => new Set([...prev, teamId]))
+        
+        console.log(`Loaded ${membersData.length} members for team ${teamId}`)
+      } else {
+        console.error('Failed to fetch team members')
+      }
+    } catch (error) {
+      console.error('Error fetching team members:', error)
+    } finally {
+      setTeamsLoading(false)
+    }
+  }
+
+  const handleAddTeam = async (e) => {
+    e.preventDefault()
     
-    setOrganization(prev => ({
-      ...prev,
-      teams: [...(prev.teams || []), newTeam]
-    }))
-    
-    setShowAddTeamModal(false)
-    setTeamFormData({
-      name: '',
-      description: '',
-      leader: ''
-    })
+    try {
+      const requestBody = {
+        name: teamFormData.name,
+        description: teamFormData.description
+      }
+      
+      const response = await api.post(`http://10.0.100.19:9904/api/v1/teams/${id}/org`, requestBody)
+      
+      if (response.ok) {
+        // Refresh teams data after successful creation
+        await fetchTeams()
+        setShowAddTeamModal(false)
+        setTeamFormData({
+          name: '',
+          description: ''
+        })
+        Swal.fire(
+          'Success!',
+          `Team "${teamFormData.name}" has been successfully created.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to create team',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error creating team:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
   }
 
   const handleAddUser = (e) => {
@@ -286,18 +468,51 @@ const OrganizationOverview = () => {
 
   const handleEditUser = (user) => {
     setEditingUser(user)
+    
+    // Find which team this user belongs to - try multiple approaches
+    let userTeamId = ''
+    let userPositionId = ''
+    
+    // First try to get team from user's team property
+    if (user.team?.id) {
+      userTeamId = user.team.id
+      userPositionId = user.position?.id || ''
+    } else {
+      // Fallback: search in teams array
+      const userTeam = teams.find(team => team.users?.some(u => u.id === user.id))
+      userTeamId = userTeam?.id || ''
+      userPositionId = user.position?.id || ''
+    }
+    
+    // Map API role back to UI role
+    const roleMapping = {
+      'SuperAdmin': 'SuperAdmin',
+      'Organization': 'Organization',
+      'Approved': 'Approval', // API sends 'Approved', UI shows 'Approval'
+      'Management': 'Management',
+      'Member': 'Member'
+    }
+    
     setUserFormData({
       firstName: user.firstName || '',
       lastName: user.lastName || '',
+      email: user.identified || user.email || '',
+      phone: user.phone || '',
       gender: user.gender || 'Male',
       dob: user.dob ? user.dob.split('T')[0] : '',
-      role: user.role || 'Member',
-      teamId: user.teamId || '',
-      positionId: user.positionId || ''
+      role: roleMapping[user.role] || user.role || 'Member',
+      teamId: userTeamId,
+      positionId: userPositionId
     })
     setShowEditUserModal(true)
+    
     // Fetch teams when opening edit modal
     fetchTeams()
+    
+    // Fetch positions for the user's current team if they have one
+    if (userTeamId) {
+      fetchPositionsForTeam(userTeamId)
+    }
   }
 
   const handleUpdateUser = async (e) => {
@@ -305,16 +520,28 @@ const OrganizationOverview = () => {
     if (!editingUser) return
 
     try {
+      // Map role names to API expected format
+      const roleMapping = {
+        'SuperAdmin': 'SuperAdmin',
+        'Organization': 'Organization', 
+        'Approval': 'Approved', // API expects 'Approved' not 'Approval'
+        'Management': 'Management',
+        'Member': 'Member'
+      }
+
       const updateData = {
         gender: userFormData.gender,
         firstName: userFormData.firstName,
         lastName: userFormData.lastName,
+        identified: userFormData.email,
+        phone: userFormData.phone,
         dob: userFormData.dob ? `${userFormData.dob}T00:00:00Z` : null,
-        role: userFormData.role,
+        role: roleMapping[userFormData.role] || userFormData.role,
         teamId: userFormData.teamId || null,
         positionId: userFormData.positionId || null
       }
 
+      console.log('Updating user with data:', updateData)
       const response = await api.put(`http://10.0.100.19:9904/api/v1/users/${editingUser.id}`, updateData)
       
       if (response.ok) {
@@ -325,29 +552,50 @@ const OrganizationOverview = () => {
         setUserFormData({
           firstName: '',
           lastName: '',
+          email: '',
+          phone: '',
           gender: 'Male',
           dob: '',
           role: 'Member',
           teamId: '',
           positionId: ''
         })
+        Swal.fire(
+          'Success!',
+          'User has been successfully updated.',
+          'success'
+        )
       } else {
         const errorData = await response.json()
-        alert(errorData.message || 'Failed to update user')
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to update user',
+          'error'
+        )
       }
     } catch (error) {
       console.error('Error updating user:', error)
-      alert('Network error. Please try again.')
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
     }
   }
 
   const handleDeleteUser = async (userId, userName) => {
     // Show confirmation dialog
-    const confirmed = window.confirm(
-      `Are you sure you want to delete user "${userName}"? This action cannot be undone.`
-    )
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to delete user "${userName}"? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    })
     
-    if (!confirmed) return
+    if (!result.isConfirmed) return
     
     try {
       const response = await api.delete(`http://10.0.100.19:9904/api/v1/users/${userId}`)
@@ -355,14 +603,132 @@ const OrganizationOverview = () => {
       if (response.ok) {
         // Refresh users data after successful deletion
         await fetchUsers()
-        alert(`User "${userName}" has been successfully deleted.`)
+        Swal.fire(
+          'Deleted!',
+          `User "${userName}" has been successfully deleted.`,
+          'success'
+        )
       } else {
         const errorData = await response.json()
-        alert(errorData.message || 'Failed to delete user')
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to delete user',
+          'error'
+        )
       }
     } catch (error) {
       console.error('Error deleting user:', error)
-      alert('Network error. Please try again.')
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleDeleteTeam = async (teamId, teamName, teamDescription) => {
+    // Show confirmation dialog
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to delete team "${teamName}"? This action cannot be undone and will remove all team members.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    })
+    
+    if (!result.isConfirmed) return
+    
+    try {
+      const requestBody = {
+        name: teamName,
+        description: teamDescription || ''
+      }
+      
+      const response = await api.delete(`http://10.0.100.19:9904/api/v1/teams/${teamId}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      })
+      
+      if (response.ok) {
+        // Refresh teams data after successful deletion
+        await fetchTeams()
+        Swal.fire(
+          'Deleted!',
+          `Team "${teamName}" has been successfully deleted.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to delete team',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error deleting team:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleEditTeam = (team) => {
+    setEditingTeam(team)
+    setTeamFormData({
+      name: team.name || '',
+      description: team.description || ''
+    })
+    setShowEditTeamModal(true)
+  }
+
+  const handleUpdateTeam = async (e) => {
+    e.preventDefault()
+    if (!editingTeam) return
+
+    try {
+      const updateData = {
+        name: teamFormData.name,
+        description: teamFormData.description
+      }
+
+      const response = await api.put(`http://10.0.100.19:9904/api/v1/teams/${editingTeam.id}`, updateData)
+      
+      if (response.ok) {
+        // Refresh teams data
+        await fetchTeams()
+        setShowEditTeamModal(false)
+        setEditingTeam(null)
+        setTeamFormData({
+          name: '',
+          description: ''
+        })
+        Swal.fire(
+          'Success!',
+          `Team "${teamFormData.name}" has been successfully updated.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to update team',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error updating team:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
     }
   }
 
@@ -379,11 +745,17 @@ const OrganizationOverview = () => {
         return
       } else {
         // For approval with existing team and position, proceed directly
-        const confirmed = window.confirm(
-          `Are you sure you want to approve the join request from "${userName}"?`
-        )
+        const result = await Swal.fire({
+          title: 'Are you sure?',
+          text: `Are you sure you want to approve the join request from "${userName}"?`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33',
+          confirmButtonText: 'Yes, approve it!'
+        })
         
-        if (!confirmed) return
+        if (!result.isConfirmed) return
         
         await submitApproval(requestId, status, requestData)
         return
@@ -391,11 +763,17 @@ const OrganizationOverview = () => {
     }
     
     // For rejection, proceed directly
-    const confirmed = window.confirm(
-      `Are you sure you want to reject the join request from "${userName}"?`
-    )
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to reject the join request from "${userName}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, reject it!'
+    })
     
-    if (!confirmed) return
+    if (!result.isConfirmed) return
     
     await submitApproval(requestId, status, requestData)
   }
@@ -414,7 +792,11 @@ const OrganizationOverview = () => {
         
         // Validate that all required IDs are present
         if (!requestBody.userId || !requestBody.positionId || !requestBody.teamId) {
-          alert('Missing required data for approval. Please ensure user, position, and team information is available.')
+          Swal.fire(
+            'Error!',
+            'Missing required data for approval. Please ensure user, position, and team information is available.',
+            'error'
+          )
           console.error('Missing IDs for approval:', requestBody)
           return
         }
@@ -428,7 +810,11 @@ const OrganizationOverview = () => {
         const userId = requestData.user?.id || requestData.userId
         
         if (!userId) {
-          alert('Missing user ID for rejection.')
+          Swal.fire(
+            'Error!',
+            'Missing user ID for rejection.',
+            'error'
+          )
           console.error('Missing user ID for rejection:', requestData)
           return
         }
@@ -442,7 +828,11 @@ const OrganizationOverview = () => {
       if (response.ok) {
         // Refresh the approval requests list
         await fetchApprovalRequests()
-        alert(`Request has been ${status.toLowerCase()} successfully.`)
+        Swal.fire(
+          'Success!',
+          `Request has been ${status.toLowerCase()} successfully.`,
+          'success'
+        )
         
         // Close position modal if it was open
         if (showPositionModal) {
@@ -452,17 +842,29 @@ const OrganizationOverview = () => {
         }
       } else {
         const errorData = await response.json()
-        alert(errorData.message || `Failed to ${status.toLowerCase()} request`)
+        Swal.fire(
+          'Error!',
+          errorData.message || `Failed to ${status.toLowerCase()} request`,
+          'error'
+        )
       }
     } catch (error) {
       console.error('Error updating approval status:', error)
-      alert('Network error. Please try again.')
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
     }
   }
 
   const handlePositionSubmit = async () => {
     if (!selectedPosition) {
-      alert('Please select a position before approving.')
+      Swal.fire(
+        'Error!',
+        'Please select a position before approving.',
+        'error'
+      )
       return
     }
     
@@ -502,23 +904,502 @@ const OrganizationOverview = () => {
     })
   }
 
+  const handleOpenSettings = () => {
+    // Populate settings form with current organization data
+    setSettingsFormData({
+      name: organization.name || '',
+      description: organization.description || '',
+      email: organization.email || '',
+      phone: organization.phone || '',
+      address: organization.address || '',
+      websiteURL: organization.websiteURL || '',
+      isEnabled: organization.isEnabled !== false,
+      allowPublicRegistration: organization.allowPublicRegistration || false,
+      requireEmailVerification: organization.requireEmailVerification !== false,
+      requireAdminApproval: organization.requireAdminApproval !== false,
+      maxTeamSize: organization.maxTeamSize || 50,
+      allowDocumentUpload: organization.allowDocumentUpload !== false,
+      allowTeamCreation: organization.allowTeamCreation !== false,
+      sessionTimeout: organization.sessionTimeout || 30,
+      passwordPolicy: {
+        minLength: organization.passwordPolicy?.minLength || 8,
+        requireUppercase: organization.passwordPolicy?.requireUppercase !== false,
+        requireLowercase: organization.passwordPolicy?.requireLowercase !== false,
+        requireNumbers: organization.passwordPolicy?.requireNumbers !== false,
+        requireSpecialChars: organization.passwordPolicy?.requireSpecialChars !== false
+      },
+      notificationSettings: {
+        emailNotifications: organization.notificationSettings?.emailNotifications !== false,
+        teamJoinRequests: organization.notificationSettings?.teamJoinRequests !== false,
+        documentUpdates: organization.notificationSettings?.documentUpdates !== false,
+        userActivity: organization.notificationSettings?.userActivity || false
+      }
+    })
+    setShowSettingsModal(true)
+  }
+
+  const handleUpdateSettings = async (e) => {
+    e.preventDefault()
+    
+    try {
+      const updateData = {
+        name: settingsFormData.name,
+        description: settingsFormData.description,
+        email: settingsFormData.email,
+        phone: settingsFormData.phone,
+        address: settingsFormData.address,
+        websiteURL: settingsFormData.websiteURL,
+        isEnabled: settingsFormData.isEnabled,
+        allowPublicRegistration: settingsFormData.allowPublicRegistration,
+        requireEmailVerification: settingsFormData.requireEmailVerification,
+        requireAdminApproval: settingsFormData.requireAdminApproval,
+        maxTeamSize: settingsFormData.maxTeamSize,
+        allowDocumentUpload: settingsFormData.allowDocumentUpload,
+        allowTeamCreation: settingsFormData.allowTeamCreation,
+        sessionTimeout: settingsFormData.sessionTimeout,
+        passwordPolicy: settingsFormData.passwordPolicy,
+        notificationSettings: settingsFormData.notificationSettings
+      }
+
+      const response = await api.put(`http://10.0.100.19:9904/api/v1/organizations/${id}`, updateData)
+      
+      if (response.ok) {
+        // Refresh organization data
+        await fetchOrganization()
+        setShowSettingsModal(false)
+        Swal.fire(
+          'Success!',
+          'Organization settings have been successfully updated.',
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to update organization settings',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error updating organization settings:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  // Position Management Functions
+  const fetchAllPositions = async () => {
+    try {
+      setAllPositionsLoading(true)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/positions/${id}/org`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const positionsData = data.result?.data?.positions || data.result?.data || []
+        setAllPositions(positionsData)
+      } else {
+        console.error('Failed to fetch positions')
+        setAllPositions([])
+      }
+    } catch (error) {
+      console.error('Error fetching positions:', error)
+      setAllPositions([])
+    } finally {
+      setAllPositionsLoading(false)
+    }
+  }
+
+  const handleOpenPositionManagement = () => {
+    setShowPositionManagementModal(true)
+    fetchAllPositions()
+    fetchTeams()
+  }
+
+  const handleAddPosition = async (e) => {
+    e.preventDefault()
+    
+    try {
+      const requestBody = {
+        name: positionFormData.name,
+        description: positionFormData.description,
+        teamId: positionFormData.teamId || null
+      }
+      
+      const response = await api.post(`http://10.0.100.19:9904/api/v1/positions/${id}/org`, requestBody)
+      
+      if (response.ok) {
+        await fetchAllPositions()
+        setShowAddPositionModal(false)
+        setPositionFormData({
+          name: '',
+          description: '',
+          teamId: ''
+        })
+        Swal.fire(
+          'Success!',
+          `Position "${positionFormData.name}" has been successfully created.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to create position',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error creating position:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleEditPosition = (position) => {
+    setEditingPosition(position)
+    setPositionFormData({
+      name: position.name || '',
+      description: position.description || '',
+      teamId: position.team?.id || position.teamId || ''
+    })
+    setShowEditPositionModal(true)
+  }
+
+  const handleUpdatePosition = async (e) => {
+    e.preventDefault()
+    if (!editingPosition) return
+
+    try {
+      const updateData = {
+        name: positionFormData.name,
+        description: positionFormData.description,
+        teamId: positionFormData.teamId || null
+      }
+
+      const response = await api.put(`http://10.0.100.19:9904/api/v1/positions/${editingPosition.id}`, updateData)
+      
+      if (response.ok) {
+        await fetchAllPositions()
+        setShowEditPositionModal(false)
+        setEditingPosition(null)
+        setPositionFormData({
+          name: '',
+          description: '',
+          teamId: ''
+        })
+        Swal.fire(
+          'Success!',
+          `Position "${positionFormData.name}" has been successfully updated.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to update position',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error updating position:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleDeletePosition = async (positionId, positionName) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to delete position "${positionName}"? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    })
+    
+    if (!result.isConfirmed) return
+    
+    try {
+      // Find the position data to include in the delete request
+      const positionToDelete = allPositions.find(pos => pos.id === positionId)
+      
+      if (!positionToDelete) {
+        Swal.fire(
+          'Error!',
+          'Position not found',
+          'error'
+        )
+        return
+      }
+
+      const deleteData = {
+        name: positionToDelete.name,
+        description: positionToDelete.description,
+        teamId: positionToDelete.team?.id || positionToDelete.teamId || null
+      }
+
+      const response = await api.delete(`http://10.0.100.19:9904/api/v1/positions/${positionId}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(deleteData)
+      })
+      
+      if (response.ok) {
+        await fetchAllPositions()
+        Swal.fire(
+          'Deleted!',
+          `Position "${positionName}" has been successfully deleted.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to delete position',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error deleting position:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  // Document Categories Functions
+  const handleAddCategory = async (e) => {
+    e.preventDefault()
+    
+    try {
+      const requestBody = {
+        name: categoryFormData.name,
+        description: categoryFormData.description,
+        color: categoryFormData.color
+      }
+      
+      const response = await api.post(`http://10.0.100.19:9904/api/v1/docCategories/${id}/org`, requestBody)
+      
+      if (response.ok) {
+        await fetchDocumentCategories()
+        setShowAddCategoryModal(false)
+        setCategoryFormData({
+          name: '',
+          description: '',
+          color: '#3B82F6'
+        })
+        Swal.fire(
+          'Success!',
+          `Category "${categoryFormData.name}" has been successfully created.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to create category',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error creating category:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleEditCategory = (category) => {
+    setEditingCategory(category)
+    setCategoryFormData({
+      name: category.name || '',
+      description: category.description || '',
+      color: category.color || '#3B82F6'
+    })
+    setShowEditCategoryModal(true)
+  }
+
+  const handleUpdateCategory = async (e) => {
+    e.preventDefault()
+    if (!editingCategory) return
+
+    try {
+      const updateData = {
+        name: categoryFormData.name,
+        description: categoryFormData.description,
+        color: categoryFormData.color
+      }
+
+      const response = await api.put(`http://10.0.100.19:9904/api/v1/docCategories/${editingCategory.id}`, updateData)
+      
+      if (response.ok) {
+        await fetchDocumentCategories()
+        setShowEditCategoryModal(false)
+        setEditingCategory(null)
+        setCategoryFormData({
+          name: '',
+          description: '',
+          color: '#3B82F6'
+        })
+        Swal.fire(
+          'Success!',
+          `Category "${categoryFormData.name}" has been successfully updated.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to update category',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error updating category:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleDeleteCategory = async (categoryId, categoryName) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to delete category "${categoryName}"? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    })
+    
+    if (!result.isConfirmed) return
+    
+    try {
+      const response = await api.delete(`http://10.0.100.19:9904/api/v1/docCategories/${categoryId}`)
+      
+      if (response.ok) {
+        await fetchDocumentCategories()
+        Swal.fire(
+          'Deleted!',
+          `Category "${categoryName}" has been successfully deleted.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to delete category',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
 
 
   const getRoleColor = (role) => {
     switch (role) {
-      case 'Admin':
-        return 'bg-red-100 text-red-800'
-      case 'Manager':
-        return 'bg-blue-100 text-blue-800'
-      case 'Employee':
-        return 'bg-green-100 text-green-800'
+      case 'SuperAdmin':
+        return 'bg-red-100 text-red-800 border border-red-200'
+      case 'Organization':
+        return 'bg-blue-100 text-blue-800 border border-blue-200'
+      case 'Approval':
+        return 'bg-purple-100 text-purple-800 border border-purple-200'
+      case 'Management':
+        return 'bg-orange-100 text-orange-800 border border-orange-200'
+      case 'Member':
+        return 'bg-green-100 text-green-800 border border-green-200'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-100 text-gray-800 border border-gray-200'
+    }
+  }
+
+  const getTeamStatus = (team) => {
+    const memberCount = team.users?.length || team.memberCount || 0
+    const approvedCount = team.users?.filter(u => u.statusJoinedOrganization === 'Approved').length || 0
+    const pendingCount = team.users?.filter(u => u.statusJoinedOrganization === 'Pending').length || 0
+    const rejectedCount = team.users?.filter(u => u.statusJoinedOrganization === 'Rejected').length || 0
+    const approverCount = team.users?.filter(u => u.role === 'Approval' || u.role === 'Approved').length || 0
+    const adminCount = team.users?.filter(u => u.role === 'SuperAdmin' || u.role === 'Organization' || u.role === 'Management').length || 0
+
+    if (memberCount === 0) {
+      return {
+        status: 'empty',
+        label: 'Empty',
+        icon: Circle,
+        color: 'bg-gray-100 text-gray-800 border-gray-200',
+        description: 'No members'
+      }
+    } else if (approvedCount > 0 && pendingCount === 0 && rejectedCount === 0) {
+      return {
+        status: 'active',
+        label: 'Active',
+        icon: CircleDot,
+        color: 'bg-green-100 text-green-800 border-green-200',
+        description: `${approvedCount} approved`
+      }
+    } else if (pendingCount > 0) {
+      return {
+        status: 'pending',
+        label: 'Pending',
+        icon: Clock,
+        color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        description: `${pendingCount} pending`
+      }
+    } else if (rejectedCount > 0) {
+      return {
+        status: 'rejected',
+        label: 'Issues',
+        icon: AlertCircle,
+        color: 'bg-red-100 text-red-800 border-red-200',
+        description: `${rejectedCount} rejected`
+      }
+    } else if (adminCount > 0) {
+      return {
+        status: 'admin',
+        label: 'Admin Team',
+        icon: Zap,
+        color: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        description: `${adminCount} admin${adminCount > 1 ? 's' : ''}`
+      }
+    } else {
+      return {
+        status: 'mixed',
+        label: 'Mixed',
+        icon: Activity,
+        color: 'bg-blue-100 text-blue-800 border-blue-200',
+        description: `${memberCount} members`
+      }
     }
   }
 
   const departments = ['IT', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations', 'Design', 'Engineering']
-  const roles = ['Admin', 'Manager', 'Employee', 'Guest']
+  const roles = ['SuperAdmin', 'Organization', 'Approval', 'Management', 'Member']
   const documentCategories = ['HR', 'Technical', 'Business', 'Marketing', 'Finance', 'Design', 'Sales', 'Legal']
 
   const tabs = [
@@ -526,7 +1407,8 @@ const OrganizationOverview = () => {
     { id: 'teams', name: 'Teams', icon: Users2 },
     { id: 'users', name: 'Users', icon: Users },
     { id: 'documents', name: 'Documents', icon: FileText },
-    { id: 'approvals', name: 'Approvals', icon: Eye }
+    { id: 'approvals', name: 'Approvals', icon: Eye },
+    { id: 'documentCategories', name: 'Document Categories', icon: Tag }
   ]
 
   if (loading) {
@@ -678,7 +1560,7 @@ const OrganizationOverview = () => {
                  </div>
                  <div className="flex items-center text-gray-600">
                    <Users className="h-4 w-4 mr-2" />
-                   <span>{users.length} Members</span>
+                   <span>{users.filter(u => u.statusJoinedOrganization === 'Approved').length} Approved Members</span>
                  </div>
                  <div className="flex items-center text-gray-600">
                    <Users2 className="h-4 w-4 mr-2" />
@@ -753,7 +1635,7 @@ const OrganizationOverview = () => {
                        <Users className="h-6 w-6 text-blue-600 mr-3" />
                        <div>
                          <p className="text-sm text-blue-600 font-medium">Total Users</p>
-                         <p className="text-xs text-blue-500">Active members</p>
+                         <p className="text-xs text-blue-500">All members</p>
                    </div>
                    </div>
                      <span className="text-2xl font-bold text-blue-700">{users.length}</span>
@@ -761,13 +1643,24 @@ const OrganizationOverview = () => {
                    
                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-green-100 rounded-lg">
                      <div className="flex items-center">
-                       <Users2 className="h-6 w-6 text-green-600 mr-3" />
+                       <CheckCircle className="h-6 w-6 text-green-600 mr-3" />
                        <div>
-                         <p className="text-sm text-green-600 font-medium">Teams</p>
-                         <p className="text-xs text-green-500">Active teams</p>
+                         <p className="text-sm text-green-600 font-medium">Approved Users</p>
+                         <p className="text-xs text-green-500">Active members</p>
+                   </div>
+                   </div>
+                     <span className="text-2xl font-bold text-green-700">{users.filter(u => u.statusJoinedOrganization === 'Approved').length}</span>
+                   </div>
+                   
+                   <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg">
+                     <div className="flex items-center">
+                       <Users2 className="h-6 w-6 text-purple-600 mr-3" />
+                       <div>
+                         <p className="text-sm text-purple-600 font-medium">Teams</p>
+                         <p className="text-xs text-purple-500">Active teams</p>
                    </div>
                  </div>
-                     <span className="text-2xl font-bold text-green-700">{teams.length}</span>
+                     <span className="text-2xl font-bold text-purple-700">{teams.length}</span>
                    </div>
                    
                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg">
@@ -798,7 +1691,7 @@ const OrganizationOverview = () => {
              {/* Quick Actions */}
              <div className="mt-8 bg-white border border-gray-200 rounded-xl p-6">
                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                  <button 
                    onClick={() => setShowAddUserModal(true)}
                    className="flex items-center p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
@@ -829,6 +1722,28 @@ const OrganizationOverview = () => {
                    <div className="text-left">
                      <p className="font-medium text-purple-900">Upload Document</p>
                      <p className="text-sm text-purple-600">Share files</p>
+                   </div>
+                 </button>
+
+                 <button 
+                   onClick={handleOpenPositionManagement}
+                   className="flex items-center p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                 >
+                   <Key className="h-6 w-6 text-indigo-600 mr-3" />
+                   <div className="text-left">
+                     <p className="font-medium text-indigo-900">Positions</p>
+                     <p className="text-sm text-indigo-600">Manage positions</p>
+                   </div>
+                 </button>
+
+                 <button 
+                   onClick={handleOpenSettings}
+                   className="flex items-center p-4 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
+                 >
+                   <Settings className="h-6 w-6 text-orange-600 mr-3" />
+                   <div className="text-left">
+                     <p className="font-medium text-orange-900">Settings</p>
+                     <p className="text-sm text-orange-600">Configure organization</p>
                    </div>
                  </button>
                </div>
@@ -997,32 +1912,50 @@ const OrganizationOverview = () => {
                                      <div className="border-t border-gray-100 pt-4">
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="text-sm font-semibold text-gray-900">Team Members</h4>
-                        {team.members && team.members.length > 3 && (
-                          <span className="text-xs text-gray-500">+{team.members.length - 3} more</span>
+                        {team.users && team.users.length > 3 && (
+                          <span className="text-xs text-gray-500">+{team.users.length - 3} more</span>
                         )}
                       </div>
                       
-                      {team.members && team.members.length > 0 ? (
+                      {team.users && team.users.length > 0 ? (
                                            <div className="space-y-2">
-                          {team.members.slice(0, 3).map((member) => (
+                          {team.users.slice(0, 3).map((member) => (
                             <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                             <div className="flex items-center">
                                 <div className="h-6 w-6 bg-primary-100 rounded-full flex items-center justify-center mr-2">
-                                  <User className="h-3 w-3 text-primary-600" />
+                                  {member.avatarURL ? (
+                                    <img src={member.avatarURL} alt={member.firstName} className="h-6 w-6 rounded-full object-cover" />
+                                  ) : (
+                                    <User className="h-3 w-3 text-primary-600" />
+                                  )}
                             </div>
-                                <span className="text-sm text-gray-700">
-                                  {member.name || `${member.firstName} ${member.lastName}` || 'Unknown Member'}
+                                <div className="flex flex-col">
+                                  <span className="text-sm text-gray-700 font-medium">
+                                    {member.firstName && member.lastName ? `${member.firstName} ${member.lastName}` : 'Unknown Member'}
+                                  </span>
+                                  <span className="text-xs text-gray-500">{member.identified}</span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end space-y-1">
+                                <span className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded ${getRoleColor(member.role)}`}>
+                                  {member.role}
+                                </span>
+                                <span className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded ${
+                                  member.statusJoinedOrganization === 'Approved'
+                                    ? 'bg-green-100 text-green-800' 
+                                    : member.statusJoinedOrganization === 'Rejected'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {member.statusJoinedOrganization || 'Pending'}
                                 </span>
                               </div>
-                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded ${getRoleColor(member.role)}`}>
-                              {member.role}
-                            </span>
                           </div>
                         ))}
-                          {team.members.length > 3 && (
+                          {team.users.length > 3 && (
                             <div className="text-center">
                               <button className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                                View all {team.members.length} members
+                                View all {team.users.length} members
                               </button>
                       </div>
                           )}
@@ -1038,11 +1971,31 @@ const OrganizationOverview = () => {
                     {/* Team Actions */}
                     <div className="mt-6 pt-4 border-t border-gray-100">
                       <div className="flex space-x-2">
-                        <button className="flex-1 bg-primary-50 hover:bg-primary-100 text-primary-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors">
-                          View Details
+                        <button 
+                          onClick={() => handleEditTeam(team)}
+                          className="flex-1 bg-primary-50 hover:bg-primary-100 text-primary-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Edit Team
                         </button>
-                        <button className="flex-1 bg-green-50 hover:bg-green-100 text-green-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors">
-                          Join Team
+                        <button 
+                          onClick={() => fetchTeamMembers(team.id)}
+                          disabled={teamsWithMembers.has(team.id)}
+                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center ${
+                            teamsWithMembers.has(team.id)
+                              ? 'bg-green-50 text-green-700 cursor-not-allowed'
+                              : 'bg-blue-50 hover:bg-blue-100 text-blue-700'
+                          }`}
+                        >
+                          <Users className="h-4 w-4 mr-1" />
+                          {teamsWithMembers.has(team.id) ? 'Members Loaded' : 'Load Members'}
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteTeam(team.id, team.name, team.description)}
+                          className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete Team
                         </button>
                       </div>
                     </div>
@@ -1133,8 +2086,8 @@ const OrganizationOverview = () => {
                  <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
                    <div className="flex items-center justify-between">
                      <div>
-                       <p className="text-2xl font-bold text-green-700">{users.filter(u => u.isEnabled).length}</p>
-                       <p className="text-green-600 font-medium">Active Users</p>
+                       <p className="text-2xl font-bold text-green-700">{users.filter(u => u.statusJoinedOrganization === 'Approved').length}</p>
+                       <p className="text-green-600 font-medium">Approved Users</p>
                      </div>
                      <div className="h-12 w-12 bg-green-200 rounded-lg flex items-center justify-center">
                        <User className="h-6 w-6 text-green-700" />
@@ -1159,7 +2112,7 @@ const OrganizationOverview = () => {
                  <div className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl p-6">
                    <div className="flex items-center justify-between">
                      <div>
-                       <p className="text-2xl font-bold text-orange-700">{new Set(users.map(u => u.positionTitle).filter(Boolean)).size}</p>
+                       <p className="text-2xl font-bold text-orange-700">{new Set(users.map(u => u.position?.name).filter(Boolean)).size}</p>
                        <p className="text-orange-600 font-medium">Positions</p>
                      </div>
                      <div className="h-12 w-12 bg-orange-200 rounded-lg flex items-center justify-center">
@@ -1221,18 +2174,22 @@ const OrganizationOverview = () => {
                      <div className="space-y-3 mb-4">
                        <div className="flex items-center text-sm">
                          <Mail className="h-4 w-4 text-gray-400 mr-2" />
-                         <span className="text-gray-700">{user.email || 'No email'}</span>
+                         <span className="text-gray-700">{user.identified || 'No contact info'}</span>
                        </div>
                        
-                       <div className="flex items-center text-sm">
-                         <Phone className="h-4 w-4 text-gray-400 mr-2" />
-                         <span className="text-gray-700">{user.identified || 'No phone'}</span>
-                       </div>
+                       {user.position && (
+                         <div className="flex items-center text-sm">
+                           <Building2 className="h-4 w-4 text-gray-400 mr-2" />
+                           <span className="text-gray-700">{user.position.name}</span>
+                         </div>
+                       )}
                        
-                       <div className="flex items-center text-sm">
-                         <Building2 className="h-4 w-4 text-gray-400 mr-2" />
-                         <span className="text-gray-700">{user.positionTitle || user.teamName || 'No position'}</span>
-                       </div>
+                       {user.team && (
+                         <div className="flex items-center text-sm">
+                           <Users2 className="h-4 w-4 text-gray-400 mr-2" />
+                           <span className="text-gray-700">{user.team.name}</span>
+                         </div>
+                       )}
                      </div>
 
                      {/* User Status and Role */}
@@ -1242,11 +2199,13 @@ const OrganizationOverview = () => {
                           {user.role}
                         </span>
                         <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                           user.isEnabled 
+                           user.statusJoinedOrganization === 'Approved'
                             ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
+                            : user.statusJoinedOrganization === 'Rejected'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-yellow-100 text-yellow-800'
                         }`}>
-                           {user.isEnabled ? 'Active' : 'Inactive'}
+                           {user.statusJoinedOrganization || 'Pending'}
                         </span>
                         </div>
                        <div className="text-xs text-gray-500">
@@ -1713,6 +2672,298 @@ const OrganizationOverview = () => {
              )}
            </div>
          )}
+
+         {/* Document Categories Tab */}
+         {activeTab === 'documentCategories' && (
+           <div>
+             {/* Header with Stats */}
+             <div className="mb-8">
+               <div className="flex items-center justify-between mb-6">
+                 <div>
+                   <h2 className="text-2xl font-bold text-gray-900">Document Categories</h2>
+                   <p className="text-gray-600 mt-1">Manage document categories for {organization.name}</p>
+                 </div>
+                 <div className="flex items-center space-x-3">
+                   <button
+                     onClick={fetchDocumentCategories}
+                     disabled={documentCategoriesLoading}
+                     className="btn-secondary flex items-center"
+                     title="Refresh categories"
+                   >
+                     <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                     </svg>
+                     Refresh
+                   </button>
+                   <button
+                     onClick={() => setShowAddCategoryModal(true)}
+                     className="btn-primary flex items-center"
+                   >
+                     <Plus className="h-4 w-4 mr-2" />
+                     Add Category
+                   </button>
+                 </div>
+               </div>
+
+               {/* Category Stats Cards */}
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-blue-700">{docCategories.length}</p>
+                       <p className="text-blue-600 font-medium">Total Categories</p>
+                     </div>
+                     <div className="h-12 w-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                       <Tag className="h-6 w-6 text-blue-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-green-700">{docCategories.filter(c => c.isEnabled !== false).length}</p>
+                       <p className="text-green-600 font-medium">Active Categories</p>
+                     </div>
+                     <div className="h-12 w-12 bg-green-200 rounded-lg flex items-center justify-center">
+                       <CheckCircle className="h-6 w-6 text-green-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-purple-700">
+                         {docCategories.reduce((total, category) => total + (category.documents?.length || 0), 0)}
+                       </p>
+                       <p className="text-purple-600 font-medium">Total Documents</p>
+                     </div>
+                     <div className="h-12 w-12 bg-purple-200 rounded-lg flex items-center justify-center">
+                       <FileText className="h-6 w-6 text-purple-700" />
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             {/* Loading State */}
+             {documentCategoriesLoading && (
+               <div className="flex items-center justify-center py-12">
+                 <LoadingSpinner size="lg" text="Loading document categories..." />
+               </div>
+             )}
+
+             {/* Categories Grid */}
+             {!documentCategoriesLoading && docCategories.length > 0 && (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {docCategories.map((category) => (
+                 <div key={category.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                   {/* Category Header */}
+                   <div className="flex items-start justify-between mb-6">
+                     <div className="flex items-center">
+                       <div 
+                         className="h-12 w-12 rounded-lg flex items-center justify-center mr-4"
+                         style={{ backgroundColor: category.color || '#3B82F6' }}
+                       >
+                         <Tag className="h-6 w-6 text-white" />
+                       </div>
+                       <div className="flex-1">
+                         <h3 className="text-lg font-semibold text-gray-900">{category.name}</h3>
+                         <p className="text-sm text-gray-500">{category.description || 'No description'}</p>
+                       </div>
+                     </div>
+                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                       category.isEnabled !== false 
+                         ? 'bg-green-100 text-green-800 border border-green-200' 
+                         : 'bg-red-100 text-red-800 border border-red-200'
+                     }`}>
+                       {category.isEnabled !== false ? '🟢 Active' : '🔴 Inactive'}
+                     </span>
+                   </div>
+                   
+                   {/* Category Stats */}
+                   <div className="grid grid-cols-2 gap-4 mb-6">
+                     <div className="bg-blue-50 rounded-lg p-4">
+                       <div className="flex items-center justify-between">
+                         <div>
+                           <p className="text-lg font-bold text-blue-700">{category.documents?.length || 0}</p>
+                           <p className="text-blue-600 text-sm">Documents</p>
+                         </div>
+                         <FileText className="h-5 w-5 text-blue-600" />
+                       </div>
+                     </div>
+                     <div className="bg-purple-50 rounded-lg p-4">
+                       <div className="flex items-center justify-between">
+                         <div>
+                           <p className="text-lg font-bold text-purple-700">
+                             {category.createdAt ? new Date(category.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}
+                           </p>
+                           <p className="text-purple-600 text-sm">Created</p>
+                         </div>
+                         <Calendar className="h-5 w-5 text-purple-600" />
+                       </div>
+                     </div>
+                   </div>
+                   
+                   <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                     <div className="flex space-x-2">
+                       <button 
+                         onClick={() => handleEditCategory(category)}
+                         className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
+                       >
+                         <Edit className="h-4 w-4 mr-1" />
+                         Edit Category
+                       </button>
+                       <button 
+                         onClick={() => handleDeleteCategory(category.id, category.name)}
+                         className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
+                       >
+                         <Trash2 className="h-4 w-4 mr-1" />
+                         Delete Category
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+               ))}
+             </div>
+             
+             )}
+
+             {/* Empty State */}
+             {!documentCategoriesLoading && docCategories.length === 0 && (
+               <div className="text-center py-16">
+                 <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-full w-32 h-32 flex items-center justify-center mx-auto mb-6">
+                   <Tag className="h-16 w-16 text-gray-400" />
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-3">No document categories found</h3>
+                 <p className="text-gray-500 mb-8 max-w-md mx-auto text-lg">
+                   This organization doesn't have any document categories yet. Create categories to organize your documents and improve file management.
+                 </p>
+                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                   <button
+                     onClick={() => setShowAddCategoryModal(true)}
+                     className="btn-primary flex items-center"
+                   >
+                     <Plus className="h-4 w-4 mr-2" />
+                     Create First Category
+                   </button>
+                   <button
+                     onClick={fetchDocumentCategories}
+                     className="btn-secondary flex items-center"
+                   >
+                     <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                     </svg>
+                     Refresh
+                   </button>
+                 </div>
+               </div>
+             )}
+
+       {/* Add Category Modal */}
+       {showAddCategoryModal && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+           <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+             <h2 className="text-xl font-semibold mb-4">Add Category</h2>
+             <form onSubmit={handleAddCategory} className="space-y-4">
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Category Name</label>
+                 <input
+                   type="text"
+                   value={categoryFormData.name}
+                   onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
+                   className="input-field"
+                   required
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                 <textarea
+                   value={categoryFormData.description}
+                   onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
+                   className="input-field"
+                   rows="3"
+                   required
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                 <input
+                   type="color"
+                   value={categoryFormData.color}
+                   onChange={(e) => setCategoryFormData({...categoryFormData, color: e.target.value})}
+                   className="input-field"
+                   required
+                 />
+               </div>
+               <div className="flex space-x-3 pt-4">
+                 <button type="submit" className="btn-primary flex-1">Add Category</button>
+                 <button
+                   type="button"
+                   onClick={() => setShowAddCategoryModal(false)}
+                   className="btn-secondary flex-1"
+                 >
+                   Cancel
+                 </button>
+               </div>
+             </form>
+           </div>
+         </div>
+       )}
+
+       {/* Edit Category Modal */}
+       {showEditCategoryModal && editingCategory && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+           <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+             <h2 className="text-xl font-semibold mb-4">Edit Category: {editingCategory.name}</h2>
+             <form onSubmit={handleUpdateCategory} className="space-y-4">
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Category Name</label>
+                 <input
+                   type="text"
+                   value={categoryFormData.name}
+                   onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
+                   className="input-field"
+                   required
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                 <textarea
+                   value={categoryFormData.description}
+                   onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
+                   className="input-field"
+                   rows="3"
+                   required
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                 <input
+                   type="color"
+                   value={categoryFormData.color}
+                   onChange={(e) => setCategoryFormData({...categoryFormData, color: e.target.value})}
+                   className="input-field"
+                   required
+                 />
+               </div>
+               <div className="flex space-x-3 pt-4">
+                 <button type="submit" className="btn-primary flex-1">Update Category</button>
+                 <button
+                   type="button"
+                   onClick={() => setShowEditCategoryModal(false)}
+                   className="btn-secondary flex-1"
+                 >
+                   Cancel
+                 </button>
+               </div>
+             </form>
+           </div>
+         </div>
+       )}
+     </div>
+         )}
        </div>
 
       {/* Add Team Modal */}
@@ -1741,27 +2992,59 @@ const OrganizationOverview = () => {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Team Leader</label>
-                <select
-                  value={teamFormData.leader}
-                  onChange={(e) => setTeamFormData({...teamFormData, leader: e.target.value})}
-                  className="input-field"
-                  required
-                >
-                  <option value="">Select Team Leader</option>
-                  {users.filter(u => u.status === 'Active').map(user => (
-                    <option key={user.id} value={user.name}>
-                      {user.name} ({user.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
               <div className="flex space-x-3 pt-4">
                 <button type="submit" className="btn-primary flex-1">Create Team</button>
                 <button
                   type="button"
                   onClick={() => setShowAddTeamModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Team Modal */}
+      {showEditTeamModal && editingTeam && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-semibold mb-4">Edit Team: {editingTeam.name}</h2>
+            <form onSubmit={handleUpdateTeam} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Team Name</label>
+                <input
+                  type="text"
+                  value={teamFormData.name}
+                  onChange={(e) => setTeamFormData({...teamFormData, name: e.target.value})}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={teamFormData.description}
+                  onChange={(e) => setTeamFormData({...teamFormData, description: e.target.value})}
+                  className="input-field"
+                  rows="3"
+                  required
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="btn-primary flex-1">Update Team</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditTeamModal(false)
+                    setEditingTeam(null)
+                    setTeamFormData({
+                      name: '',
+                      description: ''
+                    })
+                  }}
                   className="btn-secondary flex-1"
                 >
                   Cancel
@@ -1920,6 +3203,27 @@ const OrganizationOverview = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={userFormData.email || editingUser.identified || ''}
+                    onChange={(e) => setUserFormData({...userFormData, email: e.target.value})}
+                    className="input-field"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={userFormData.phone || editingUser.phone || ''}
+                    onChange={(e) => setUserFormData({...userFormData, phone: e.target.value})}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
                   <select
                     value={userFormData.gender}
@@ -1951,8 +3255,10 @@ const OrganizationOverview = () => {
                     className="input-field"
                     required
                   >
-                    <option value="AdminOrganization">Admin Organization</option>
-                    <option value="Approved">Approved</option>
+                    <option value="SuperAdmin">SuperAdmin</option>
+                    <option value="Organization">Organization</option>
+                    <option value="Approval">Approval</option>
+                    <option value="Management">Management</option>
                     <option value="Member">Member</option>
                   </select>
                 </div>
@@ -1960,7 +3266,15 @@ const OrganizationOverview = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
                   <select
                     value={userFormData.teamId}
-                    onChange={(e) => setUserFormData({...userFormData, teamId: e.target.value})}
+                    onChange={(e) => {
+                      setUserFormData({...userFormData, teamId: e.target.value, positionId: ''})
+                      // Fetch positions for the selected team
+                      if (e.target.value) {
+                        fetchPositionsForTeam(e.target.value)
+                      } else {
+                        setPositions([])
+                      }
+                    }}
                     className="input-field"
                     disabled={teamsLoading}
                   >
@@ -1974,14 +3288,21 @@ const OrganizationOverview = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Position ID</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                <select
                   value={userFormData.positionId}
                   onChange={(e) => setUserFormData({...userFormData, positionId: e.target.value})}
                   className="input-field"
-                  placeholder="Enter position ID"
-                />
+                  disabled={!userFormData.teamId || positionsLoading}
+                >
+                  <option value="">
+                    {!userFormData.teamId ? 'Select a team first' : 
+                     positionsLoading ? 'Loading positions...' : 'Select Position'}
+                  </option>
+                  {!positionsLoading && positions.map(position => (
+                    <option key={position.id} value={position.id}>{position.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex space-x-3 pt-4">
                 <button type="submit" className="btn-primary flex-1">Update User</button>
@@ -1993,6 +3314,8 @@ const OrganizationOverview = () => {
                     setUserFormData({
                       firstName: '',
                       lastName: '',
+                      email: '',
+                      phone: '',
                       gender: 'Male',
                       dob: '',
                       role: 'Member',
@@ -2073,6 +3396,788 @@ const OrganizationOverview = () => {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Organization Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="h-10 w-10 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                    <Settings className="h-5 w-5 text-orange-600" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900">Organization Settings</h2>
+                </div>
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateSettings} className="p-6 space-y-8">
+              {/* Basic Information */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <div className="flex items-center mb-4">
+                  <Building2 className="h-5 w-5 text-gray-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Organization Name</label>
+                    <input
+                      type="text"
+                      value={settingsFormData.name}
+                      onChange={(e) => setSettingsFormData({...settingsFormData, name: e.target.value})}
+                      className="input-field"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      value={settingsFormData.description}
+                      onChange={(e) => setSettingsFormData({...settingsFormData, description: e.target.value})}
+                      className="input-field"
+                      rows="2"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <div className="flex items-center mb-4">
+                  <Mail className="h-5 w-5 text-gray-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Contact Information</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      value={settingsFormData.email}
+                      onChange={(e) => setSettingsFormData({...settingsFormData, email: e.target.value})}
+                      className="input-field"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                    <input
+                      type="tel"
+                      value={settingsFormData.phone}
+                      onChange={(e) => setSettingsFormData({...settingsFormData, phone: e.target.value})}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <input
+                      type="text"
+                      value={settingsFormData.address}
+                      onChange={(e) => setSettingsFormData({...settingsFormData, address: e.target.value})}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
+                    <input
+                      type="url"
+                      value={settingsFormData.websiteURL}
+                      onChange={(e) => setSettingsFormData({...settingsFormData, websiteURL: e.target.value})}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Organization Status */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <div className="flex items-center mb-4">
+                  <Shield className="h-5 w-5 text-gray-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Organization Status</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Organization Status</p>
+                      <p className="text-sm text-gray-500">Enable or disable the organization</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.isEnabled}
+                        onChange={(e) => setSettingsFormData({...settingsFormData, isEnabled: e.target.checked})}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Settings */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <div className="flex items-center mb-4">
+                  <Lock className="h-5 w-5 text-gray-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Security Settings</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Allow Public Registration</p>
+                      <p className="text-sm text-gray-500">Allow users to register without invitation</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.allowPublicRegistration}
+                        onChange={(e) => setSettingsFormData({...settingsFormData, allowPublicRegistration: e.target.checked})}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Require Email Verification</p>
+                      <p className="text-sm text-gray-500">Users must verify their email address</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.requireEmailVerification}
+                        onChange={(e) => setSettingsFormData({...settingsFormData, requireEmailVerification: e.target.checked})}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Require Admin Approval</p>
+                      <p className="text-sm text-gray-500">New users require admin approval</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.requireAdminApproval}
+                        onChange={(e) => setSettingsFormData({...settingsFormData, requireAdminApproval: e.target.checked})}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Maximum Team Size</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={settingsFormData.maxTeamSize}
+                        onChange={(e) => setSettingsFormData({...settingsFormData, maxTeamSize: parseInt(e.target.value)})}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Session Timeout (minutes)</label>
+                      <input
+                        type="number"
+                        min="5"
+                        max="480"
+                        value={settingsFormData.sessionTimeout}
+                        onChange={(e) => setSettingsFormData({...settingsFormData, sessionTimeout: parseInt(e.target.value)})}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feature Settings */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <div className="flex items-center mb-4">
+                  <Globe className="h-5 w-5 text-gray-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Feature Settings</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Allow Document Upload</p>
+                      <p className="text-sm text-gray-500">Users can upload and share documents</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.allowDocumentUpload}
+                        onChange={(e) => setSettingsFormData({...settingsFormData, allowDocumentUpload: e.target.checked})}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Allow Team Creation</p>
+                      <p className="text-sm text-gray-500">Users can create new teams</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.allowTeamCreation}
+                        onChange={(e) => setSettingsFormData({...settingsFormData, allowTeamCreation: e.target.checked})}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Password Policy */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <div className="flex items-center mb-4">
+                  <Key className="h-5 w-5 text-gray-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Password Policy</h3>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Password Length</label>
+                    <input
+                      type="number"
+                      min="6"
+                      max="20"
+                      value={settingsFormData.passwordPolicy.minLength}
+                      onChange={(e) => setSettingsFormData({
+                        ...settingsFormData, 
+                        passwordPolicy: {...settingsFormData.passwordPolicy, minLength: parseInt(e.target.value)}
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                      <div>
+                        <p className="font-medium text-gray-900">Require Uppercase</p>
+                        <p className="text-sm text-gray-500">At least one uppercase letter</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settingsFormData.passwordPolicy.requireUppercase}
+                          onChange={(e) => setSettingsFormData({
+                            ...settingsFormData, 
+                            passwordPolicy: {...settingsFormData.passwordPolicy, requireUppercase: e.target.checked}
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                      <div>
+                        <p className="font-medium text-gray-900">Require Lowercase</p>
+                        <p className="text-sm text-gray-500">At least one lowercase letter</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settingsFormData.passwordPolicy.requireLowercase}
+                          onChange={(e) => setSettingsFormData({
+                            ...settingsFormData, 
+                            passwordPolicy: {...settingsFormData.passwordPolicy, requireLowercase: e.target.checked}
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                      <div>
+                        <p className="font-medium text-gray-900">Require Numbers</p>
+                        <p className="text-sm text-gray-500">At least one number</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settingsFormData.passwordPolicy.requireNumbers}
+                          onChange={(e) => setSettingsFormData({
+                            ...settingsFormData, 
+                            passwordPolicy: {...settingsFormData.passwordPolicy, requireNumbers: e.target.checked}
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                      <div>
+                        <p className="font-medium text-gray-900">Require Special Characters</p>
+                        <p className="text-sm text-gray-500">At least one special character</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settingsFormData.passwordPolicy.requireSpecialChars}
+                          onChange={(e) => setSettingsFormData({
+                            ...settingsFormData, 
+                            passwordPolicy: {...settingsFormData.passwordPolicy, requireSpecialChars: e.target.checked}
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notification Settings */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <div className="flex items-center mb-4">
+                  <Bell className="h-5 w-5 text-gray-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Notification Settings</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Email Notifications</p>
+                      <p className="text-sm text-gray-500">Send email notifications to users</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.notificationSettings.emailNotifications}
+                        onChange={(e) => setSettingsFormData({
+                          ...settingsFormData, 
+                          notificationSettings: {...settingsFormData.notificationSettings, emailNotifications: e.target.checked}
+                        })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Team Join Requests</p>
+                      <p className="text-sm text-gray-500">Notify admins of team join requests</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.notificationSettings.teamJoinRequests}
+                        onChange={(e) => setSettingsFormData({
+                          ...settingsFormData, 
+                          notificationSettings: {...settingsFormData.notificationSettings, teamJoinRequests: e.target.checked}
+                        })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">Document Updates</p>
+                      <p className="text-sm text-gray-500">Notify users of document changes</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.notificationSettings.documentUpdates}
+                        onChange={(e) => setSettingsFormData({
+                          ...settingsFormData, 
+                          notificationSettings: {...settingsFormData.notificationSettings, documentUpdates: e.target.checked}
+                        })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div>
+                      <p className="font-medium text-gray-900">User Activity</p>
+                      <p className="text-sm text-gray-500">Track and notify of user activity</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsFormData.notificationSettings.userActivity}
+                        onChange={(e) => setSettingsFormData({
+                          ...settingsFormData, 
+                          notificationSettings: {...settingsFormData.notificationSettings, userActivity: e.target.checked}
+                        })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3 pt-6 border-t border-gray-200">
+                <button type="submit" className="btn-primary flex-1">Save Settings</button>
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Position Management Modal */}
+      {showPositionManagementModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="h-10 w-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                    <Key className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900">Position Management</h2>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={fetchAllPositions}
+                    disabled={allPositionsLoading}
+                    className="btn-secondary flex items-center"
+                    title="Refresh positions"
+                  >
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
+                  <button
+                    onClick={() => setShowAddPositionModal(true)}
+                    className="btn-primary flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Position
+                  </button>
+                  <button
+                    onClick={() => setShowPositionManagementModal(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+                             {/* Position Stats */}
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                 <div className="bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-indigo-700">{allPositions.length}</p>
+                       <p className="text-indigo-600 font-medium">Total Positions</p>
+                     </div>
+                     <div className="h-12 w-12 bg-indigo-200 rounded-lg flex items-center justify-center">
+                       <Key className="h-6 w-6 text-indigo-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-green-700">{allPositions.filter(p => p.isEnabled !== false).length}</p>
+                       <p className="text-green-600 font-medium">Active Positions</p>
+                     </div>
+                     <div className="h-12 w-12 bg-green-200 rounded-lg flex items-center justify-center">
+                       <CheckCircle className="h-6 w-6 text-green-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-blue-700">{teams.length}</p>
+                       <p className="text-blue-600 font-medium">Available Teams</p>
+                     </div>
+                     <div className="h-12 w-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                       <Users2 className="h-6 w-6 text-blue-700" />
+                     </div>
+                   </div>
+                 </div>
+               </div>
+
+              {/* Loading State */}
+              {allPositionsLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <LoadingSpinner size="lg" text="Loading positions..." />
+                </div>
+              )}
+
+              {/* Positions Grid */}
+              {!allPositionsLoading && allPositions.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {allPositions.map((position) => (
+                    <div key={position.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                      {/* Position Header */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center">
+                          <div className="h-12 w-12 bg-gradient-to-r from-indigo-100 to-indigo-200 rounded-lg flex items-center justify-center mr-4">
+                            <Key className="h-6 w-6 text-indigo-600" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">{position.name}</h3>
+                            <p className="text-sm text-gray-500">{position.description || 'No description'}</p>
+                            {position.team && (
+                              <p className="text-sm text-indigo-600 font-medium">
+                                Team: {position.team.name}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                                                 <div className="flex items-center space-x-2">
+                           <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                             position.isEnabled !== false 
+                               ? 'bg-green-100 text-green-800 border border-green-200' 
+                               : 'bg-red-100 text-red-800 border border-red-200'
+                           }`}>
+                             {position.isEnabled !== false ? '🟢 Active' : '🔴 Inactive'}
+                           </span>
+                         </div>
+                      </div>
+
+                                             {/* Position Details */}
+                       <div className="space-y-3 mb-4">
+                         {position.description && (
+                           <div className="text-sm">
+                             <p className="text-gray-500 font-medium mb-1">Description:</p>
+                             <p className="text-gray-700">{position.description}</p>
+                           </div>
+                         )}
+                       </div>
+
+                      {/* Position Actions */}
+                      <div className="flex space-x-2 pt-4 border-t border-gray-100">
+                        <button 
+                          onClick={() => handleEditPosition(position)}
+                          className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDeletePosition(position.id, position.name)}
+                          className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!allPositionsLoading && allPositions.length === 0 && (
+                <div className="text-center py-16">
+                  <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-full w-32 h-32 flex items-center justify-center mx-auto mb-6">
+                    <Key className="h-16 w-16 text-gray-400" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">No positions found</h3>
+                  <p className="text-gray-500 mb-8 max-w-md mx-auto text-lg">
+                    This organization doesn't have any positions yet. Create the first position to define roles and responsibilities for your team members.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                      onClick={() => setShowAddPositionModal(true)}
+                      className="btn-primary flex items-center"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create First Position
+                    </button>
+                    <button
+                      onClick={fetchAllPositions}
+                      className="btn-secondary flex items-center"
+                    >
+                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Position Modal */}
+      {showAddPositionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="h-10 w-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                    <Plus className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900">Add New Position</h2>
+                </div>
+                <button
+                  onClick={() => setShowAddPositionModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+                         <form onSubmit={handleAddPosition} className="p-6 space-y-6">
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Position Name *</label>
+                 <input
+                   type="text"
+                   value={positionFormData.name}
+                   onChange={(e) => setPositionFormData({...positionFormData, name: e.target.value})}
+                   className="input-field"
+                   required
+                 />
+               </div>
+
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                 <textarea
+                   value={positionFormData.description}
+                   onChange={(e) => setPositionFormData({...positionFormData, description: e.target.value})}
+                   className="input-field"
+                   rows="3"
+                   placeholder="Enter position description..."
+                 />
+               </div>
+
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
+                 <select
+                   value={positionFormData.teamId}
+                   onChange={(e) => setPositionFormData({...positionFormData, teamId: e.target.value})}
+                   className="input-field"
+                 >
+                   <option value="">No Team (General)</option>
+                   {teams.map(team => (
+                     <option key={team.id} value={team.id}>{team.name}</option>
+                   ))}
+                 </select>
+               </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="btn-primary flex-1">Create Position</button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddPositionModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Position Modal */}
+      {showEditPositionModal && editingPosition && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="h-10 w-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                    <Edit className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900">Edit Position: {editingPosition.name}</h2>
+                </div>
+                <button
+                  onClick={() => setShowEditPositionModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+                         <form onSubmit={handleUpdatePosition} className="p-6 space-y-6">
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Position Name *</label>
+                 <input
+                   type="text"
+                   value={positionFormData.name}
+                   onChange={(e) => setPositionFormData({...positionFormData, name: e.target.value})}
+                   className="input-field"
+                   required
+                 />
+               </div>
+
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                 <textarea
+                   value={positionFormData.description}
+                   onChange={(e) => setPositionFormData({...positionFormData, description: e.target.value})}
+                   className="input-field"
+                   rows="3"
+                   placeholder="Enter position description..."
+                 />
+               </div>
+
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
+                 <select
+                   value={positionFormData.teamId}
+                   onChange={(e) => setPositionFormData({...positionFormData, teamId: e.target.value})}
+                   className="input-field"
+                 >
+                   <option value="">No Team (General)</option>
+                   {teams.map(team => (
+                     <option key={team.id} value={team.id}>{team.name}</option>
+                   ))}
+                 </select>
+               </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="btn-primary flex-1">Update Position</button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditPositionModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
