@@ -17,7 +17,10 @@ import {
   User,
   Users2,
   FolderOpen,
-  AlertCircle
+  AlertCircle,
+  QrCode,
+  Download,
+  X
 } from 'lucide-react'
 
 const OrganizationManagement = () => {
@@ -26,6 +29,7 @@ const OrganizationManagement = () => {
   const [organizations, setOrganizations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [submitLoading, setSubmitLoading] = useState(false)
 
   const [searchTerm, setSearchTerm] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -35,6 +39,11 @@ const OrganizationManagement = () => {
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [selectedOrg, setSelectedOrg] = useState(null)
   const [selectedTeam, setSelectedTeam] = useState(null)
+  const [industries, setIndustries] = useState([])
+  const [industriesLoading, setIndustriesLoading] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [qrCodeData, setQrCodeData] = useState(null)
+  const [qrCodeLoading, setQrCodeLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -42,12 +51,12 @@ const OrganizationManagement = () => {
     phone: '',
     address: '',
     websiteURL: '',
+    industriesId: '',
     isEnabled: true
   })
   const [teamFormData, setTeamFormData] = useState({
     name: '',
-    description: '',
-    leader: ''
+    description: ''
   })
 
 
@@ -55,28 +64,59 @@ const OrganizationManagement = () => {
   // Fetch organizations from API
   useEffect(() => {
     fetchOrganizations()
+    fetchIndustries()
   }, [])
 
   const fetchOrganizations = async () => {
     try {
       setLoading(true)
       setError(null)
+      console.log('Fetching organizations...')
       const response = await api.get('http://10.0.100.19:9904/api/v1/organizations')
+      console.log('Organizations response status:', response.status)
       
       if (response.ok) {
         const data = await response.json()
+        console.log('Organizations response data:', data)
         // Handle the nested API response structure
         const orgs = data.result?.data?.organizations || []
         setOrganizations(orgs)
       } else {
         const errorData = await response.json()
-        setError(errorData.message || 'Failed to fetch organizations')
+        console.error('Organizations fetch error:', errorData)
+        setError(errorData.result?.serviceResult?.message || errorData.message || 'Failed to fetch organizations')
       }
     } catch (error) {
       console.error('Error fetching organizations:', error)
       setError('Network error. Please check your connection.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchIndustries = async () => {
+    try {
+      setIndustriesLoading(true)
+      console.log('Fetching industries...')
+      const response = await api.get('http://10.0.100.19:9904/api/v1/industries')
+      console.log('Industries response status:', response.status)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Industries response data:', data)
+        // Handle the nested API response structure
+        const industriesData = data.result?.data?.industries || []
+        setIndustries(industriesData)
+      } else {
+        const errorData = await response.json()
+        console.error('Industries fetch error:', errorData)
+        setIndustries([])
+      }
+    } catch (error) {
+      console.error('Error fetching industries:', error)
+      setIndustries([])
+    } finally {
+      setIndustriesLoading(false)
     }
   }
 
@@ -88,11 +128,26 @@ const OrganizationManagement = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    // Validate required fields
+    if (!formData.name || !formData.email || !formData.phone || !formData.address || !formData.industriesId) {
+      alert('Please fill in all required fields: Name, Email, Phone, Address, and Industry')
+      return
+    }
+    
     try {
+      setSubmitLoading(true)
+      console.log('Submitting organization data:', formData)
+      
       if (editingOrg) {
         // Update organization
+        console.log('Updating organization:', editingOrg.id)
         const response = await api.put(`http://10.0.100.19:9904/api/v1/organizations/${editingOrg.id}`, formData)
+        console.log('Update response status:', response.status)
+        
         if (response.ok) {
+          const responseData = await response.json()
+          console.log('Update response data:', responseData)
           await fetchOrganizations() // Refresh the list
           setShowModal(false)
           setEditingOrg(null)
@@ -103,16 +158,24 @@ const OrganizationManagement = () => {
             phone: '',
             address: '',
             websiteURL: '',
+            industriesId: '',
             isEnabled: true
           })
+          alert('Organization updated successfully!')
         } else {
           const errorData = await response.json()
-          alert(errorData.message || 'Failed to update organization')
+          console.error('Update error:', errorData)
+          alert(errorData.result?.serviceResult?.message || errorData.message || 'Failed to update organization')
         }
       } else {
         // Create new organization
+        console.log('Creating new organization')
         const response = await api.post('http://10.0.100.19:9904/api/v1/organizations', formData)
+        console.log('Create response status:', response.status)
+        
         if (response.ok) {
+          const responseData = await response.json()
+          console.log('Create response data:', responseData)
           await fetchOrganizations() // Refresh the list
           setShowModal(false)
           setFormData({
@@ -122,16 +185,21 @@ const OrganizationManagement = () => {
             phone: '',
             address: '',
             websiteURL: '',
+            industriesId: '',
             isEnabled: true
           })
+          alert('Organization created successfully!')
         } else {
           const errorData = await response.json()
-          alert(errorData.message || 'Failed to create organization')
+          console.error('Create error:', errorData)
+          alert(errorData.result?.serviceResult?.message || errorData.message || 'Failed to create organization')
         }
       }
     } catch (error) {
       console.error('Error saving organization:', error)
       alert('Network error. Please try again.')
+    } finally {
+      setSubmitLoading(false)
     }
   }
 
@@ -153,15 +221,19 @@ const OrganizationManagement = () => {
       setShowTeamModal(false)
       setTeamFormData({
         name: '',
-        description: '',
-        leader: ''
+        description: ''
       })
     }
   }
 
   const handleEdit = (org) => {
     setEditingOrg(org)
-    setFormData(org)
+    // Find the industry ID if we have the industry name
+    const industriesId = org.industry ? industries.find(ind => ind.name === org.industry)?.id || '' : ''
+    setFormData({
+      ...org,
+      industriesId: industriesId
+    })
     setShowModal(true)
   }
 
@@ -185,6 +257,42 @@ const OrganizationManagement = () => {
   const handleViewUsers = (org) => {
     setSelectedOrg(org)
     setShowUsersModal(true)
+  }
+
+  const handleGenerateQRCode = async (orgId, orgName) => {
+    try {
+      setQrCodeLoading(true)
+      console.log('Generating QR code for organization:', orgId)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/organizations/${orgId}/genQR`)
+      console.log('QR code generation response status:', response.status)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('QR code generation response:', data)
+        
+        // Check if the response contains QR code data
+        if (data.result?.data?.qrCode) {
+          const qrCodeData = data.result.data.qrCode
+          setQrCodeData({
+            code: qrCodeData,
+            organizationName: orgName,
+            qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeData)}`
+          })
+          setShowQRModal(true)
+        } else {
+          alert('No QR code data received from API')
+        }
+      } else {
+        const errorData = await response.json()
+        console.error('QR code generation error:', errorData)
+        alert(errorData.result?.serviceResult?.message || errorData.message || 'Failed to generate QR code')
+      }
+    } catch (error) {
+      console.error('Error generating QR code:', error)
+      alert('Network error. Please try again.')
+    } finally {
+      setQrCodeLoading(false)
+    }
   }
 
   const handleViewTeams = (org) => {
@@ -314,6 +422,13 @@ const OrganizationManagement = () => {
                 </div>
               <div className="flex space-x-2">
                 <button
+                  onClick={() => handleGenerateQRCode(org.id, org.name)}
+                  className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
+                  title="Generate QR Code"
+                >
+                  <QrCode className="h-4 w-4" />
+                </button>
+                <button
                   onClick={() => handleViewTeams(org)}
                   className="p-1 text-gray-400 hover:text-green-600 transition-colors"
                   title="View Teams"
@@ -357,6 +472,14 @@ const OrganizationManagement = () => {
                 <MapPin className="h-4 w-4 mr-2" />
                 {org.address}
               </div>
+              {org.industry && (
+                <div className="flex items-center text-sm text-gray-600">
+                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  {org.industry}
+                </div>
+              )}
                              <div className="flex items-center justify-between text-sm">
                  <div className="flex items-center text-gray-600">
                    <Calendar className="h-4 w-4 mr-2" />
@@ -503,6 +626,28 @@ const OrganizationManagement = () => {
                   placeholder="https://example.com"
                 />
               </div>
+                                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Industry
+                    </label>
+                    <select
+                      name="industriesId"
+                      value={formData.industriesId}
+                      onChange={handleInputChange}
+                      className="input-field"
+                      required
+                      disabled={industriesLoading}
+                    >
+                      <option value="">
+                        {industriesLoading ? 'Loading industries...' : 'Select Industry'}
+                      </option>
+                      {industries.map((industry) => (
+                        <option key={industry.id} value={industry.id}>
+                          {industry.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -522,8 +667,19 @@ const OrganizationManagement = () => {
                 <button
                   type="submit"
                   className="btn-primary flex-1"
+                  disabled={submitLoading}
                 >
-                  {editingOrg ? 'Update' : 'Create'}
+                  {submitLoading ? (
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {editingOrg ? 'Updating...' : 'Creating...'}
+                    </span>
+                  ) : (
+                    editingOrg ? 'Update' : 'Create'
+                  )}
                 </button>
                 <button
                   type="button"
@@ -537,10 +693,12 @@ const OrganizationManagement = () => {
                       phone: '',
                       address: '',
                       websiteURL: '',
+                      industriesId: '',
                       isEnabled: true
                     })
                   }}
                   className="btn-secondary flex-1"
+                  disabled={submitLoading}
                 >
                   Cancel
                 </button>
@@ -658,10 +816,6 @@ const OrganizationManagement = () => {
                     </div>
                     <div className="space-y-2 mb-3">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Leader:</span>
-                        <span className="font-medium">{team.leader}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Members:</span>
                         <span className="font-medium">{team.members?.length || 0}</span>
                       </div>
@@ -736,25 +890,7 @@ const OrganizationManagement = () => {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Team Leader
-                </label>
-                <select
-                  name="leader"
-                  value={teamFormData.leader}
-                  onChange={handleTeamInputChange}
-                  className="input-field"
-                  required
-                >
-                  <option value="">Select Team Leader</option>
-                  {selectedOrg.users.filter(u => u.status === 'Active').map(user => (
-                    <option key={user.id} value={user.name}>
-                      {user.name} ({user.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
+
               <div className="flex space-x-3 pt-4">
                 <button
                   type="submit"
@@ -768,8 +904,7 @@ const OrganizationManagement = () => {
                     setShowTeamModal(false)
                     setTeamFormData({
                       name: '',
-                      description: '',
-                      leader: ''
+                      description: ''
                     })
                   }}
                   className="btn-secondary flex-1"
@@ -778,6 +913,96 @@ const OrganizationManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQRModal && qrCodeData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                  <QrCode className="h-5 w-5 text-purple-600" />
+                </div>
+                <h2 className="text-xl font-semibold text-gray-900">QR Code</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowQRModal(false)
+                  setQrCodeData(null)
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="text-center">
+              <div className="bg-gray-50 rounded-lg p-6 mb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {qrCodeData.organizationName}
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Organization Code: <span className="font-mono font-medium">{qrCodeData.code}</span>
+                </p>
+                <div className="flex justify-center mb-4">
+                  <img 
+                    src={qrCodeData.qrCodeUrl} 
+                    alt="QR Code" 
+                    className="border border-gray-200 rounded-lg"
+                    width="200"
+                    height="200"
+                  />
+                </div>
+                <p className="text-xs text-gray-500">
+                  Scan this QR code to access the organization
+                </p>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      // Fetch the QR code image as a blob
+                      const response = await fetch(qrCodeData.qrCodeUrl)
+                      const blob = await response.blob()
+                      
+                      // Create a download link
+                      const url = window.URL.createObjectURL(blob)
+                      const link = document.createElement('a')
+                      link.href = url
+                      link.download = `qr-code-${qrCodeData.organizationName}.png`
+                      
+                      // Trigger download
+                      document.body.appendChild(link)
+                      link.click()
+                      
+                      // Clean up
+                      document.body.removeChild(link)
+                      window.URL.revokeObjectURL(url)
+                    } catch (error) {
+                      console.error('Error downloading QR code:', error)
+                      alert('Failed to download QR code. Please try again.')
+                    }
+                  }}
+                  className="btn-primary flex-1 flex items-center justify-center"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </button>
+                <button
+                  onClick={() => {
+                    setShowQRModal(false)
+                    setQrCodeData(null)
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

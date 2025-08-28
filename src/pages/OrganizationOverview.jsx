@@ -3,8 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useApi } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
-import Swal from 'sweetalert2/dist/sweetalert2.js'
-import 'sweetalert2/dist/sweetalert2.css'
+import Swal from 'sweetalert2'
 import { 
   ArrowLeft,
   Building2,
@@ -25,7 +24,6 @@ import {
   X,
   FileText,
   Download,
-  Upload,
   AlertCircle,
   CheckCircle,
   XCircle,
@@ -43,7 +41,11 @@ import {
   Palette,
   Key,
   Folder,
-  Tag
+  Tag,
+  Briefcase,
+  ChevronDown,
+  ChevronRight,
+  QrCode
 } from 'lucide-react'
 
 const OrganizationOverview = () => {
@@ -70,8 +72,7 @@ const OrganizationOverview = () => {
   const [userFormData, setUserFormData] = useState({
     firstName: '',
     lastName: '',
-    email: '',
-    phone: '',
+    identified: '',
     gender: 'Male',
     dob: '',
     role: 'Member',
@@ -79,15 +80,8 @@ const OrganizationOverview = () => {
     positionId: ''
   })
 
-  const [showAddDocumentModal, setShowAddDocumentModal] = useState(false)
-  const [documentFormData, setDocumentFormData] = useState({
-    title: '',
-    description: '',
-    category: '',
-    author: '',
-    version: '1.0',
-    status: 'Active'
-  })
+
+
 
   // Approval requests data
   const [approvalRequests, setApprovalRequests] = useState([])
@@ -110,6 +104,7 @@ const OrganizationOverview = () => {
     phone: '',
     address: '',
     websiteURL: '',
+    industriesId: '',
     isEnabled: true,
     allowPublicRegistration: false,
     requireEmailVerification: true,
@@ -154,13 +149,50 @@ const OrganizationOverview = () => {
   const [editingCategory, setEditingCategory] = useState(null)
   const [categoryFormData, setCategoryFormData] = useState({
     name: '',
-    description: '',
-    color: '#3B82F6'
+    description: ''
   })
+
+
+
+  // Project Portal state
+  const [projectPortals, setProjectPortals] = useState([])
+  const [projectPortalsLoading, setProjectPortalsLoading] = useState(false)
+  const [showAddProjectPortalModal, setShowAddProjectPortalModal] = useState(false)
+  const [showEditProjectPortalModal, setShowEditProjectPortalModal] = useState(false)
+  const [editingProjectPortal, setEditingProjectPortal] = useState(null)
+  const [projectPortalFormData, setProjectPortalFormData] = useState({
+    name: '',
+    description: ''
+  })
+
+  // Document Level state
+  const [documentLevels, setDocumentLevels] = useState([])
+  const [documentLevelsLoading, setDocumentLevelsLoading] = useState(false)
+  const [showAddDocumentLevelModal, setShowAddDocumentLevelModal] = useState(false)
+  const [showEditDocumentLevelModal, setShowEditDocumentLevelModal] = useState(false)
+  const [editingDocumentLevel, setEditingDocumentLevel] = useState(null)
+  const [documentLevelFormData, setDocumentLevelFormData] = useState({
+    name: '',
+    description: '',
+    parentId: ''
+  })
+  const [expandedLevels, setExpandedLevels] = useState(new Set())
+  const [childLevels, setChildLevels] = useState({})
+  const [loadingChildLevels, setLoadingChildLevels] = useState({})
+
+  // Industries state
+  const [industries, setIndustries] = useState([])
+  const [industriesLoading, setIndustriesLoading] = useState(false)
+  
+  // QR Code state
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [qrCodeData, setQrCodeData] = useState(null)
+  const [qrCodeLoading, setQrCodeLoading] = useState(false)
 
   // Fetch organization data from API
   useEffect(() => {
     fetchOrganization()
+    fetchIndustries()
   }, [id])
 
   // Fetch users when Users tab is selected
@@ -188,6 +220,26 @@ const OrganizationOverview = () => {
   useEffect(() => {
     if (activeTab === 'documentCategories') {
       fetchDocumentCategories()
+    }
+  }, [activeTab, id])
+
+    
+
+
+
+ 
+
+       // Fetch project portals when Project Portals tab is selected
+  useEffect(() => {
+     if (activeTab === 'projectPortals') {
+      fetchProjectPortals()
+    }
+  }, [activeTab, id])
+
+  // Fetch document levels when Document Levels tab is selected
+  useEffect(() => {
+    if (activeTab === 'documentLevels') {
+      fetchDocumentLevels()
     }
   }, [activeTab, id])
 
@@ -225,6 +277,28 @@ const OrganizationOverview = () => {
     }
   }
 
+  const fetchIndustries = async () => {
+    try {
+      setIndustriesLoading(true)
+      const response = await api.get('http://10.0.100.19:9904/api/v1/industries')
+      
+      if (response.ok) {
+        const data = await response.json()
+        // Handle the nested API response structure
+        const industriesData = data.result?.data?.industries || []
+        setIndustries(industriesData)
+      } else {
+        console.error('Failed to fetch industries')
+        setIndustries([])
+      }
+    } catch (error) {
+      console.error('Error fetching industries:', error)
+      setIndustries([])
+    } finally {
+      setIndustriesLoading(false)
+    }
+  }
+
   const fetchUsers = async () => {
     try {
       setUsersLoading(true)
@@ -256,8 +330,8 @@ const OrganizationOverview = () => {
       if (response.ok) {
         const data = await response.json()
         const teamsData = data.result?.data?.teams || data.result?.data || []
-        setOrganization(prev => ({
-          ...prev,
+    setOrganization(prev => ({
+      ...prev,
           teams: teamsData
         }))
       } else {
@@ -310,6 +384,10 @@ const OrganizationOverview = () => {
       setDocumentCategoriesLoading(false)
     }
   }
+
+
+
+
 
   const fetchPositions = async () => {
     try {
@@ -376,8 +454,8 @@ const OrganizationOverview = () => {
         const membersData = data.result?.data?.members || data.result?.data || []
         
         // Update the specific team with its members
-        setOrganization(prev => ({
-          ...prev,
+    setOrganization(prev => ({
+      ...prev,
           teams: prev.teams.map(team => 
             team.id === teamId 
               ? { ...team, users: membersData }
@@ -413,9 +491,9 @@ const OrganizationOverview = () => {
       if (response.ok) {
         // Refresh teams data after successful creation
         await fetchTeams()
-        setShowAddTeamModal(false)
-        setTeamFormData({
-          name: '',
+    setShowAddTeamModal(false)
+    setTeamFormData({
+      name: '',
           description: ''
         })
         Swal.fire(
@@ -496,8 +574,7 @@ const OrganizationOverview = () => {
     setUserFormData({
       firstName: user.firstName || '',
       lastName: user.lastName || '',
-      email: user.identified || user.email || '',
-      phone: user.phone || '',
+      identified: user.identified || user.email || '',
       gender: user.gender || 'Male',
       dob: user.dob ? user.dob.split('T')[0] : '',
       role: roleMapping[user.role] || user.role || 'Member',
@@ -524,7 +601,7 @@ const OrganizationOverview = () => {
       const roleMapping = {
         'SuperAdmin': 'SuperAdmin',
         'Organization': 'Organization', 
-        'Approval': 'Approved', // API expects 'Approved' not 'Approval'
+        'Approval': 'Approval', // API now expects 'Approval'
         'Management': 'Management',
         'Member': 'Member'
       }
@@ -533,8 +610,7 @@ const OrganizationOverview = () => {
         gender: userFormData.gender,
         firstName: userFormData.firstName,
         lastName: userFormData.lastName,
-        identified: userFormData.email,
-        phone: userFormData.phone,
+        identified: userFormData.identified,
         dob: userFormData.dob ? `${userFormData.dob}T00:00:00Z` : null,
         role: roleMapping[userFormData.role] || userFormData.role,
         teamId: userFormData.teamId || null,
@@ -549,11 +625,10 @@ const OrganizationOverview = () => {
         await fetchUsers()
         setShowEditUserModal(false)
         setEditingUser(null)
-        setUserFormData({
-          firstName: '',
-          lastName: '',
-          email: '',
-          phone: '',
+    setUserFormData({
+      firstName: '',
+      lastName: '',
+      identified: '',
           gender: 'Male',
           dob: '',
           role: 'Member',
@@ -575,6 +650,105 @@ const OrganizationOverview = () => {
       }
     } catch (error) {
       console.error('Error updating user:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleGenerateQRCode = async () => {
+    try {
+      setQrCodeLoading(true)
+      console.log('Generating QR code for organization:', id)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/organizations/${id}/genQR`)
+      console.log('QR code generation response status:', response.status)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('QR code generation response:', data)
+        
+        // Check if the response contains QR code data
+        if (data.result?.data?.qrCode) {
+          const qrCodeData = data.result.data.qrCode
+          setQrCodeData({
+            code: qrCodeData,
+            organizationName: organization?.name || 'Organization',
+            qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeData)}`
+          })
+          setShowQRModal(true)
+        } else {
+          Swal.fire(
+            'Error!',
+            'No QR code data received from API',
+            'error'
+          )
+        }
+      } else {
+        const errorData = await response.json()
+        console.error('QR code generation error:', errorData)
+        Swal.fire(
+          'Error!',
+          errorData.result?.serviceResult?.message || errorData.message || 'Failed to generate QR code',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error generating QR code:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    } finally {
+      setQrCodeLoading(false)
+    }
+  }
+
+  const handleSetAsAdmin = async (user) => {
+    const result = await Swal.fire({
+      title: 'Set as Admin?',
+      text: `Are you sure you want to set "${user.firstName} ${user.lastName}" as an Organization Admin?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, set as Admin!'
+    })
+    
+    if (!result.isConfirmed) return
+    
+    try {
+      const updateData = {
+        gender: user.gender || 'Male',
+        firstName: user.firstName,
+        lastName: user.lastName,
+        dob: user.dob || '1998-05-01T00:00:00Z',
+        role: 'Organization', // Set role to Organization
+        teamId: user.team?.id || '',
+        positionId: user.position?.id || ''
+      }
+
+      const response = await api.put(`http://10.0.100.19:9904/api/v1/users/${user.id}`, updateData)
+      
+      if (response.ok) {
+        await fetchUsers() // Refresh the users list
+        Swal.fire(
+          'Success!',
+          `${user.firstName} ${user.lastName} has been set as Organization Admin.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to set user as admin',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error setting user as admin:', error)
       Swal.fire(
         'Error!',
         'Network error. Please try again.',
@@ -878,31 +1052,7 @@ const OrganizationOverview = () => {
     )
   }
 
-  const handleAddDocument = (e) => {
-    e.preventDefault()
-    const newDocument = {
-      id: Date.now(),
-      ...documentFormData,
-      uploadDate: new Date().toISOString().split('T')[0],
-      fileSize: '1.0 MB',
-      downloads: 0
-    }
-    
-    setOrganization(prev => ({
-      ...prev,
-      documents: [...(prev.documents || []), newDocument]
-    }))
-    
-    setShowAddDocumentModal(false)
-    setDocumentFormData({
-      title: '',
-      description: '',
-      category: '',
-      author: '',
-      version: '1.0',
-      status: 'Active'
-    })
-  }
+
 
   const handleOpenSettings = () => {
     // Populate settings form with current organization data
@@ -913,6 +1063,7 @@ const OrganizationOverview = () => {
       phone: organization.phone || '',
       address: organization.address || '',
       websiteURL: organization.websiteURL || '',
+      industriesId: organization.industriesId || '',
       isEnabled: organization.isEnabled !== false,
       allowPublicRegistration: organization.allowPublicRegistration || false,
       requireEmailVerification: organization.requireEmailVerification !== false,
@@ -949,6 +1100,7 @@ const OrganizationOverview = () => {
         phone: settingsFormData.phone,
         address: settingsFormData.address,
         websiteURL: settingsFormData.websiteURL,
+        industriesId: settingsFormData.industriesId,
         isEnabled: settingsFormData.isEnabled,
         allowPublicRegistration: settingsFormData.allowPublicRegistration,
         requireEmailVerification: settingsFormData.requireEmailVerification,
@@ -1035,7 +1187,7 @@ const OrganizationOverview = () => {
         setShowAddPositionModal(false)
         setPositionFormData({
           name: '',
-          description: '',
+      description: '',
           teamId: ''
         })
         Swal.fire(
@@ -1187,8 +1339,7 @@ const OrganizationOverview = () => {
     try {
       const requestBody = {
         name: categoryFormData.name,
-        description: categoryFormData.description,
-        color: categoryFormData.color
+        description: categoryFormData.description
       }
       
       const response = await api.post(`http://10.0.100.19:9904/api/v1/docCategories/${id}/org`, requestBody)
@@ -1198,8 +1349,7 @@ const OrganizationOverview = () => {
         setShowAddCategoryModal(false)
         setCategoryFormData({
           name: '',
-          description: '',
-          color: '#3B82F6'
+          description: ''
         })
         Swal.fire(
           'Success!',
@@ -1228,8 +1378,7 @@ const OrganizationOverview = () => {
     setEditingCategory(category)
     setCategoryFormData({
       name: category.name || '',
-      description: category.description || '',
-      color: category.color || '#3B82F6'
+      description: category.description || ''
     })
     setShowEditCategoryModal(true)
   }
@@ -1241,8 +1390,7 @@ const OrganizationOverview = () => {
     try {
       const updateData = {
         name: categoryFormData.name,
-        description: categoryFormData.description,
-        color: categoryFormData.color
+        description: categoryFormData.description
       }
 
       const response = await api.put(`http://10.0.100.19:9904/api/v1/docCategories/${editingCategory.id}`, updateData)
@@ -1253,8 +1401,7 @@ const OrganizationOverview = () => {
         setEditingCategory(null)
         setCategoryFormData({
           name: '',
-          description: '',
-          color: '#3B82F6'
+          description: ''
         })
         Swal.fire(
           'Success!',
@@ -1322,6 +1469,393 @@ const OrganizationOverview = () => {
 
 
 
+
+
+
+
+
+
+  const fetchProjectPortals = async () => {
+    try {
+      setProjectPortalsLoading(true)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/projectPortals/${id}/org`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const portalsData = data.result?.data?.projectPortals || data.result?.data || []
+        setProjectPortals(portalsData)
+      } else {
+        console.error('Failed to fetch project portals')
+        setProjectPortals([])
+      }
+    } catch (error) {
+      console.error('Error fetching project portals:', error)
+      setProjectPortals([])
+    } finally {
+      setProjectPortalsLoading(false)
+    }
+  }
+
+  const handleAddProjectPortal = async (e) => {
+    e.preventDefault()
+    
+    try {
+      const requestBody = {
+        name: projectPortalFormData.name,
+        description: projectPortalFormData.description
+      }
+      
+      const response = await api.post(`http://10.0.100.19:9904/api/v1/projectPortals/${id}/org`, requestBody)
+      
+      if (response.ok) {
+        await fetchProjectPortals()
+                setShowAddProjectPortalModal(false)
+        setProjectPortalFormData({
+          name: '',
+          description: ''
+        })
+        Swal.fire(
+          'Success!',
+          `Project Portal "${projectPortalFormData.name}" has been successfully created.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to create project portal',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error creating project portal:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleEditProjectPortal = (portal) => {
+    setEditingProjectPortal(portal)
+    setProjectPortalFormData({
+      name: portal.name || '',
+      description: portal.description || ''
+    })
+    setShowEditProjectPortalModal(true)
+  }
+
+  const handleUpdateProjectPortal = async (e) => {
+    e.preventDefault()
+    if (!editingProjectPortal) return
+
+    try {
+      const updateData = {
+        name: projectPortalFormData.name,
+        description: projectPortalFormData.description
+      }
+
+      const response = await api.put(`http://10.0.100.19:9904/api/v1/projectPortals/${editingProjectPortal.id}`, updateData)
+      
+      if (response.ok) {
+        await fetchProjectPortals()
+        setShowEditProjectPortalModal(false)
+        setEditingProjectPortal(null)
+        setProjectPortalFormData({
+          name: '',
+          description: ''
+        })
+        Swal.fire(
+          'Success!',
+          `Project Portal "${projectPortalFormData.name}" has been successfully updated.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to update project portal',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error updating project portal:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleDeleteProjectPortal = async (portalId, portalName) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to delete project portal "${portalName}"? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    })
+    
+    if (!result.isConfirmed) return
+    
+    try {
+      const response = await api.delete(`http://10.0.100.19:9904/api/v1/projectPortals/${portalId}`)
+      
+      if (response.ok) {
+        await fetchProjectPortals()
+        Swal.fire(
+          'Deleted!',
+          `Project Portal "${portalName}" has been successfully deleted.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to delete project portal',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error deleting project portal:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const fetchDocumentLevels = async () => {
+    try {
+      setDocumentLevelsLoading(true)
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/docLevels/${id}/org`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const levelsData = data.result?.data?.docLevels || data.result?.data || []
+        setDocumentLevels(levelsData)
+      } else {
+        console.error('Failed to fetch document levels')
+      }
+    } catch (error) {
+      console.error('Error fetching document levels:', error)
+    } finally {
+      setDocumentLevelsLoading(false)
+    }
+  }
+
+  const fetchChildLevels = async (parentId) => {
+    try {
+      setLoadingChildLevels(prev => ({ ...prev, [parentId]: true }))
+      const response = await api.get(`http://10.0.100.19:9904/api/v1/docLevels/${parentId}/parent`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        const childData = data.result?.data?.docLevels || data.result?.data || []
+        setChildLevels(prev => ({ ...prev, [parentId]: childData }))
+      } else {
+        console.error('Failed to fetch child levels for parent:', parentId)
+        setChildLevels(prev => ({ ...prev, [parentId]: [] }))
+      }
+    } catch (error) {
+      console.error('Error fetching child levels:', error)
+      setChildLevels(prev => ({ ...prev, [parentId]: [] }))
+    } finally {
+      setLoadingChildLevels(prev => ({ ...prev, [parentId]: false }))
+    }
+  }
+
+  const toggleLevelExpansion = (levelId) => {
+    const newExpanded = new Set(expandedLevels)
+    if (newExpanded.has(levelId)) {
+      newExpanded.delete(levelId)
+    } else {
+      newExpanded.add(levelId)
+      // Fetch child levels if not already loaded
+      if (!childLevels[levelId] && !loadingChildLevels[levelId]) {
+        fetchChildLevels(levelId)
+      }
+    }
+    setExpandedLevels(newExpanded)
+  }
+
+  const handleAddDocumentLevel = async (e) => {
+    e.preventDefault()
+    
+    try {
+      const createData = {
+        name: documentLevelFormData.name,
+        description: documentLevelFormData.description,
+        parentId: documentLevelFormData.parentId || null
+      }
+
+      const response = await api.post(`http://10.0.100.19:9904/api/v1/docLevels/${id}/org`, createData)
+      
+      if (response.ok) {
+        await fetchDocumentLevels()
+        // Refresh child levels if this was a child level
+        if (documentLevelFormData.parentId) {
+          await fetchChildLevels(documentLevelFormData.parentId)
+        }
+        setShowAddDocumentLevelModal(false)
+        setDocumentLevelFormData({
+          name: '',
+          description: '',
+          parentId: ''
+        })
+        Swal.fire(
+          'Success!',
+          `Document Level "${documentLevelFormData.name}" has been successfully created.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to create document level',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error creating document level:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleEditDocumentLevel = (level) => {
+    setEditingDocumentLevel(level)
+    setDocumentLevelFormData({
+      name: level.name || '',
+      description: level.description || '',
+      parentId: level.parentId || ''
+    })
+    setShowEditDocumentLevelModal(true)
+  }
+
+  const handleAddSubLevel = (parentLevel) => {
+    setEditingDocumentLevel(null)
+    setDocumentLevelFormData({
+      name: '',
+      description: '',
+      parentId: parentLevel.id
+    })
+    setShowAddDocumentLevelModal(true)
+  }
+
+  const handleUpdateDocumentLevel = async (e) => {
+    e.preventDefault()
+    if (!editingDocumentLevel) {
+      console.error('No editing document level found')
+      return
+    }
+
+    try {
+      const updateData = {
+        name: documentLevelFormData.name,
+        description: documentLevelFormData.description,
+        parentId: documentLevelFormData.parentId || null
+      }
+
+      const response = await api.put(`http://10.0.100.19:9904/api/v1/docLevels/${editingDocumentLevel.id}`, updateData)
+      
+      if (response.ok) {
+        await fetchDocumentLevels()
+        // Refresh child levels if this was a child level
+        if (editingDocumentLevel?.parentId) {
+          await fetchChildLevels(editingDocumentLevel.parentId)
+        }
+        setShowEditDocumentLevelModal(false)
+        setEditingDocumentLevel(null)
+        setDocumentLevelFormData({
+          name: '',
+          description: '',
+          parentId: ''
+        })
+        Swal.fire(
+          'Success!',
+          `Document Level "${documentLevelFormData.name}" has been successfully updated.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to update document level',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error updating document level:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
+  const handleDeleteDocumentLevel = async (levelId, levelName) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to delete document level "${levelName}"? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    })
+    
+    if (!result.isConfirmed) return
+    
+    try {
+      const response = await api.delete(`http://10.0.100.19:9904/api/v1/docLevels/${levelId}`)
+      
+      if (response.ok) {
+        await fetchDocumentLevels()
+        // Clear any cached child levels for this level
+        setChildLevels(prev => {
+          const newChildLevels = { ...prev }
+          delete newChildLevels[levelId]
+          return newChildLevels
+        })
+        // Remove from expanded levels
+        setExpandedLevels(prev => {
+          const newExpanded = new Set(prev)
+          newExpanded.delete(levelId)
+          return newExpanded
+        })
+        Swal.fire(
+          'Deleted!',
+          `Document Level "${levelName}" has been successfully deleted.`,
+          'success'
+        )
+      } else {
+        const errorData = await response.json()
+        Swal.fire(
+          'Error!',
+          errorData.message || 'Failed to delete document level',
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error('Error deleting document level:', error)
+      Swal.fire(
+        'Error!',
+        'Network error. Please try again.',
+        'error'
+      )
+    }
+  }
+
   const getRoleColor = (role) => {
     switch (role) {
       case 'SuperAdmin':
@@ -1344,7 +1878,7 @@ const OrganizationOverview = () => {
     const approvedCount = team.users?.filter(u => u.statusJoinedOrganization === 'Approved').length || 0
     const pendingCount = team.users?.filter(u => u.statusJoinedOrganization === 'Pending').length || 0
     const rejectedCount = team.users?.filter(u => u.statusJoinedOrganization === 'Rejected').length || 0
-    const approverCount = team.users?.filter(u => u.role === 'Approval' || u.role === 'Approved').length || 0
+    const approverCount = team.users?.filter(u => u.role === 'Approval').length || 0
     const adminCount = team.users?.filter(u => u.role === 'SuperAdmin' || u.role === 'Organization' || u.role === 'Management').length || 0
 
     if (memberCount === 0) {
@@ -1407,6 +1941,8 @@ const OrganizationOverview = () => {
     { id: 'teams', name: 'Teams', icon: Users2 },
     { id: 'users', name: 'Users', icon: Users },
     { id: 'documents', name: 'Documents', icon: FileText },
+     { id: 'projectPortals', name: 'Project Portals', icon: Briefcase },
+    { id: 'documentLevels', name: 'Document Levels', icon: Folder },
     { id: 'approvals', name: 'Approvals', icon: Eye },
     { id: 'documentCategories', name: 'Document Categories', icon: Tag }
   ]
@@ -1465,6 +2001,22 @@ const OrganizationOverview = () => {
           </div>
                      <div className="flex space-x-3">
              <button
+               onClick={handleGenerateQRCode}
+               className="btn-secondary flex items-center"
+               title="Generate QR Code"
+               disabled={qrCodeLoading}
+             >
+               {qrCodeLoading ? (
+                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                 </svg>
+               ) : (
+                 <QrCode className="h-4 w-4 mr-2" />
+               )}
+               {qrCodeLoading ? 'Generating...' : 'Generate QR Code'}
+             </button>
+             <button
                onClick={() => setShowAddTeamModal(true)}
                className="btn-primary flex items-center"
              >
@@ -1478,13 +2030,7 @@ const OrganizationOverview = () => {
                <User className="h-4 w-4 mr-2" />
                Add User
              </button>
-             <button
-               onClick={() => setShowAddDocumentModal(true)}
-               className="btn-secondary flex items-center"
-             >
-               <Upload className="h-4 w-4 mr-2" />
-               Add Document
-             </button>
+             
            </div>
         </div>
       </div>
@@ -1617,6 +2163,18 @@ const OrganizationOverview = () => {
                        </div>
                      </div>
                    )}
+                   
+                   {organization.industry && (
+                     <div className="flex items-center p-3 bg-gray-50 rounded-lg">
+                       <svg className="h-5 w-5 text-gray-400 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                       </svg>
+                       <div>
+                         <p className="text-sm text-gray-500">Industry</p>
+                         <p className="font-medium text-gray-900">{organization.industry}</p>
+                       </div>
+                     </div>
+                   )}
                  </div>
                </div>
 
@@ -1648,7 +2206,7 @@ const OrganizationOverview = () => {
                          <p className="text-sm text-green-600 font-medium">Approved Users</p>
                          <p className="text-xs text-green-500">Active members</p>
                    </div>
-                   </div>
+                 </div>
                      <span className="text-2xl font-bold text-green-700">{users.filter(u => u.statusJoinedOrganization === 'Approved').length}</span>
                    </div>
                    
@@ -1714,16 +2272,7 @@ const OrganizationOverview = () => {
                    </div>
                  </button>
                  
-                 <button 
-                   onClick={() => setShowAddDocumentModal(true)}
-                   className="flex items-center p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
-                 >
-                   <Upload className="h-6 w-6 text-purple-600 mr-3" />
-                   <div className="text-left">
-                     <p className="font-medium text-purple-900">Upload Document</p>
-                     <p className="text-sm text-purple-600">Share files</p>
-                   </div>
-                 </button>
+                 
 
                  <button 
                    onClick={handleOpenPositionManagement}
@@ -1895,18 +2444,7 @@ const OrganizationOverview = () => {
                       </div>
                     </div>
 
-                    {/* Team Leader */}
-                    <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 bg-primary-100 rounded-full flex items-center justify-center mr-3">
-                          <User className="h-4 w-4 text-primary-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500">Team Leader</p>
-                          <p className="font-medium text-gray-900">{team.leader || team.leaderName || 'No leader assigned'}</p>
-                        </div>
-                      </div>
-                    </div>
+
 
                     {/* Team Members Preview */}
                                      <div className="border-t border-gray-100 pt-4">
@@ -1938,8 +2476,8 @@ const OrganizationOverview = () => {
                               </div>
                               <div className="flex flex-col items-end space-y-1">
                                 <span className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded ${getRoleColor(member.role)}`}>
-                                  {member.role}
-                                </span>
+                              {member.role}
+                            </span>
                                 <span className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded ${
                                   member.statusJoinedOrganization === 'Approved'
                                     ? 'bg-green-100 text-green-800' 
@@ -1948,7 +2486,7 @@ const OrganizationOverview = () => {
                                     : 'bg-yellow-100 text-yellow-800'
                                 }`}>
                                   {member.statusJoinedOrganization || 'Pending'}
-                                </span>
+                            </span>
                               </div>
                           </div>
                         ))}
@@ -1971,7 +2509,7 @@ const OrganizationOverview = () => {
                     {/* Team Actions */}
                     <div className="mt-6 pt-4 border-t border-gray-100">
                       <div className="flex space-x-2">
-                        <button 
+                        <button
                           onClick={() => handleEditTeam(team)}
                           className="flex-1 bg-primary-50 hover:bg-primary-100 text-primary-700 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
                         >
@@ -2153,6 +2691,17 @@ const OrganizationOverview = () => {
                           </div>
                         </div>
                                                <div className="flex space-x-1">
+                          {user.role !== 'Organization' && (
+                            <button 
+                              onClick={() => handleSetAsAdmin(user)}
+                              className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                              title="Set as Admin"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleEditUser(user)}
                             className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
@@ -2244,13 +2793,6 @@ const OrganizationOverview = () => {
            <div>
              <div className="flex items-center justify-between mb-6">
                <h2 className="text-xl font-semibold">Documents</h2>
-               <button
-                 onClick={() => setShowAddDocumentModal(true)}
-                 className="btn-primary flex items-center"
-               >
-                 <Upload className="h-4 w-4 mr-2" />
-                 Add Document
-               </button>
              </div>
              
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2325,104 +2867,298 @@ const OrganizationOverview = () => {
                         </div>
        )}
 
-       {/* Add Document Modal */}
-       {showAddDocumentModal && (
-         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-           <div className="bg-white rounded-lg max-w-2xl w-full p-6">
-             <h2 className="text-xl font-semibold mb-4">Add Document to {organization.name}</h2>
-             <form onSubmit={handleAddDocument} className="space-y-4">
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Document Title</label>
-                 <input
-                   type="text"
-                   value={documentFormData.title}
-                   onChange={(e) => setDocumentFormData({...documentFormData, title: e.target.value})}
-                   className="input-field"
-                   required
-                 />
+
                </div>
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                 <textarea
-                   value={documentFormData.description}
-                   onChange={(e) => setDocumentFormData({...documentFormData, description: e.target.value})}
-                   className="input-field"
-                   rows="3"
-                   required
-                 />
-               </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+         )}
+
+
+
+
+               
+
+         {/* Document Levels Tab */}
+         {activeTab === 'documentLevels' && (
+           <div>
+             {/* Header with Stats */}
+             <div className="mb-8">
+               <div className="flex items-center justify-between mb-6">
                  <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                   <select
-                     value={documentFormData.category}
-                     onChange={(e) => setDocumentFormData({...documentFormData, category: e.target.value})}
-                     className="input-field"
-                     required
+                   <h2 className="text-2xl font-bold text-gray-900">Document Levels</h2>
+                   <p className="text-gray-600 mt-1">Manage document levels for {organization.name}</p>
+                 </div>
+                 <div className="flex items-center space-x-3">
+                   <button
+                     onClick={() => setShowAddDocumentLevelModal(true)}
+                     disabled={documentLevelsLoading}
+                     className="btn-primary flex items-center"
                    >
-                     <option value="">Select Category</option>
-                     {documentCategories.map(category => (
-                       <option key={category} value={category}>{category}</option>
-                     ))}
-                   </select>
+                     <Plus className="h-4 w-4 mr-2" />
+                     Add Level
+                   </button>
                  </div>
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                   <select
-                     value={documentFormData.author}
-                     onChange={(e) => setDocumentFormData({...documentFormData, author: e.target.value})}
-                     className="input-field"
-                     required
+               </div>
+               
+               {/* Document Levels Stats Cards */}
+               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-blue-700">{documentLevels.length}</p>
+                       <p className="text-blue-600 font-medium">Total Levels</p>
+                     </div>
+                     <div className="h-12 w-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                       <Folder className="h-6 w-6 text-blue-700" />
+                     </div>
+                   </div>
+                 </div>
+
+
+
+                 <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-purple-700">{documentLevels.filter(l => l.createdAt && new Date(l.createdAt) > new Date(Date.now() - 30*24*60*60*1000)).length}</p>
+                       <p className="text-purple-600 font-medium">Recent</p>
+                     </div>
+                     <div className="h-12 w-12 bg-purple-200 rounded-lg flex items-center justify-center">
+                       <Calendar className="h-6 w-6 text-purple-700" />
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             {/* Loading State */}
+             {documentLevelsLoading && (
+               <div className="flex items-center justify-center py-12">
+                 <LoadingSpinner size="lg" text="Loading document levels..." />
+               </div>
+             )}
+
+             {/* Document Levels Folder View */}
+             {!documentLevelsLoading && documentLevels.length > 0 && (
+               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                   <div className="flex items-center justify-between">
+                     <div className="flex items-center space-x-3">
+                       <Folder className="h-5 w-5 text-gray-600" />
+                       <h3 className="text-lg font-semibold text-gray-900">Document Levels Hierarchy</h3>
+                     </div>
+                     <div className="flex items-center space-x-2">
+                       <span className="text-sm text-gray-500">{documentLevels.length} levels</span>
+                     </div>
+                   </div>
+                 </div>
+                 
+                 <div className="p-6">
+                   <div className="space-y-3">
+                     {documentLevels
+                       .sort((a, b) => a.level - b.level)
+                       .map((level, index) => (
+                         <div key={level.id} className="group">
+                           <div className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200 border border-gray-200">
+                             <div className="flex items-center space-x-4">
+                               {/* Indentation based on level */}
+                               <div className="flex items-center space-x-2">
+                                 {Array.from({ length: Math.min(level.level - 1, 3) }, (_, i) => (
+                                   <div key={i} className="w-1 h-8 bg-gray-300 rounded-full"></div>
+                                 ))}
+                               </div>
+                               
+                               {/* Folder Icon */}
+                               <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                                 level.level === 1 ? 'bg-blue-100' :
+                                 level.level === 2 ? 'bg-green-100' :
+                                 level.level === 3 ? 'bg-purple-100' :
+                                 level.level === 4 ? 'bg-orange-100' :
+                                 'bg-gray-100'
+                               }`}>
+                                 <Folder className={`h-5 w-5 ${
+                                   level.level === 1 ? 'text-blue-600' :
+                                   level.level === 2 ? 'text-green-600' :
+                                   level.level === 3 ? 'text-purple-600' :
+                                   level.level === 4 ? 'text-orange-600' :
+                                   'text-gray-600'
+                                 }`} />
+                               </div>
+                               
+                               {/* Level Info */}
+                               <div className="flex-1">
+                                 <div className="flex items-center space-x-3">
+                                   <h4 className="text-lg font-semibold text-gray-900">{level.name}</h4>
+                                   <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                                     Parent
+                                   </span>
+                                 </div>
+                                 {level.description && (
+                                   <p className="text-sm text-gray-600 mt-1">{level.description}</p>
+                                 )}
+                                 <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                   <span>Created: {level.createdAt ? new Date(level.createdAt).toLocaleDateString() : 'N/A'}</span>
+                                   {level.documents && (
+                                     <span>{level.documents.length} documents</span>
+                                   )}
+                                 </div>
+                               </div>
+                             </div>
+                             
+                                                            {/* Action Buttons */}
+                               <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                 <button 
+                                   onClick={() => toggleLevelExpansion(level.id)}
+                                   className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200"
+                                   title={expandedLevels.has(level.id) ? "Collapse" : "Expand"}
+                                 >
+                                   {expandedLevels.has(level.id) ? (
+                                     <ChevronDown className="h-4 w-4" />
+                                   ) : (
+                                     <ChevronRight className="h-4 w-4" />
+                                   )}
+                                 </button>
+                                 <button 
+                                   onClick={() => handleEditDocumentLevel(level)}
+                                   className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                                   title="Edit level"
+                                 >
+                                   <Edit className="h-4 w-4" />
+                                 </button>
+                                 <button 
+                                   onClick={() => handleDeleteDocumentLevel(level.id, level.name)}
+                                   className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                                   title="Delete level"
+                                 >
+                                   <Trash2 className="h-4 w-4" />
+                                 </button>
+                                 <button 
+                                   onClick={() => handleAddSubLevel(level)}
+                                   className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
+                                   title="Add sub-level"
+                                 >
+                                   <Plus className="h-4 w-4" />
+                                 </button>
+                               </div>
+                           </div>
+                           
+                           {/* Child levels from API */}
+                           {expandedLevels.has(level.id) && (
+                             <div className="ml-8 mt-2 space-y-2">
+                               {loadingChildLevels[level.id] ? (
+                                 <div className="flex items-center justify-center p-4 bg-white rounded-lg border border-gray-100">
+                                   <div className="flex items-center space-x-2">
+                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                                     <span className="text-sm text-gray-500">Loading child levels...</span>
+                                   </div>
+                                 </div>
+                               ) : childLevels[level.id] && childLevels[level.id].length > 0 ? (
+                                 childLevels[level.id].map((childLevel) => (
+                                   <div key={childLevel.id} className="group">
+                                     <div className="flex items-center justify-between p-3 bg-white hover:bg-gray-50 rounded-lg transition-colors duration-200 border border-gray-100">
+                                       <div className="flex items-center space-x-3">
+                                         {/* Additional indentation for child levels */}
+                                         <div className="flex items-center space-x-2">
+                                           <div className="w-1 h-6 bg-gray-300 rounded-full"></div>
+                                         </div>
+                                         
+                                         <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+                                           childLevel.level === 2 ? 'bg-green-100' :
+                                           childLevel.level === 3 ? 'bg-purple-100' :
+                                           childLevel.level === 4 ? 'bg-orange-100' :
+                                           'bg-gray-100'
+                                         }`}>
+                                           <Folder className={`h-4 w-4 ${
+                                             childLevel.level === 2 ? 'text-green-600' :
+                                             childLevel.level === 3 ? 'text-purple-600' :
+                                             childLevel.level === 4 ? 'text-orange-600' :
+                                             'text-gray-600'
+                                           }`} />
+                                         </div>
+                                         
+                                         <div className="flex-1">
+                                           <div className="flex items-center space-x-2">
+                                             <h5 className="text-sm font-medium text-gray-900">{childLevel.name}</h5>
+
+                                             <span className="inline-flex px-1.5 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                                               Child
+                                             </span>
+                                           </div>
+                                           {childLevel.description && (
+                                             <p className="text-xs text-gray-500 mt-1">{childLevel.description}</p>
+                                           )}
+                                         </div>
+                                       </div>
+                                       
+                                       {/* Child level action buttons */}
+                                       <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                         <button 
+                                           onClick={() => handleEditDocumentLevel(childLevel)}
+                                           className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                                           title="Edit child level"
+                                         >
+                                           <Edit className="h-3 w-3" />
+                                         </button>
+                                         <button 
+                                           onClick={() => handleDeleteDocumentLevel(childLevel.id, childLevel.name)}
+                                           className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                                           title="Delete child level"
+                                         >
+                                           <Trash2 className="h-3 w-3" />
+                                         </button>
+                                         <button 
+                                           onClick={() => handleAddSubLevel(childLevel)}
+                                           className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors duration-200"
+                                           title="Add sub-level to child"
+                                         >
+                                           <Plus className="h-3 w-3" />
+                                         </button>
+                                       </div>
+                                     </div>
+                                   </div>
+                                 ))
+                               ) : (
+                                 <div className="flex items-center justify-center p-4 bg-white rounded-lg border border-gray-100">
+                                   <div className="text-center">
+                                     <Folder className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                                     <p className="text-sm text-gray-500">No child levels found</p>
+                                     <button 
+                                       onClick={() => handleAddSubLevel(level)}
+                                       className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                     >
+                                       Add first child level
+                                     </button>
+                                   </div>
+                                 </div>
+                               )}
+                             </div>
+                           )}
+                         </div>
+                       ))}
+                   </div>
+                 </div>
+               </div>
+             )}
+
+             {/* Empty State */}
+             {!documentLevelsLoading && documentLevels.length === 0 && (
+               <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
+                 <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
+                   <Folder className="h-12 w-12 text-gray-400" />
+                 </div>
+                 <h3 className="text-xl font-bold text-gray-900 mb-3">No document levels found</h3>
+                 <p className="text-gray-500 mb-6 max-w-md mx-auto">
+                   Start building your document hierarchy by creating the first level. This will help organize your documents in a structured folder system.
+                 </p>
+                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                   <button
+                     onClick={() => setShowAddDocumentLevelModal(true)}
+                     className="btn-primary flex items-center"
                    >
-                     <option value="">Select Author</option>
-                  {users.filter(u => u.status === 'Active').map(user => (
-                       <option key={user.id} value={user.name}>
-                         {user.name} ({user.role})
-                       </option>
-                     ))}
-                   </select>
+                     <Plus className="h-4 w-4 mr-2" />
+                     Create First Level
+                   </button>
                  </div>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
-                   <input
-                     type="text"
-                     value={documentFormData.version}
-                     onChange={(e) => setDocumentFormData({...documentFormData, version: e.target.value})}
-                     className="input-field"
-                     placeholder="1.0"
-                     required
-                   />
-                 </div>
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                   <select
-                     value={documentFormData.status}
-                     onChange={(e) => setDocumentFormData({...documentFormData, status: e.target.value})}
-                     className="input-field"
-                   >
-                     <option value="Active">Active</option>
-                     <option value="Draft">Draft</option>
-                     <option value="Archived">Archived</option>
-                   </select>
-                 </div>
-               </div>
-               <div className="flex space-x-3 pt-4">
-                 <button type="submit" className="btn-primary flex-1">Add Document</button>
-                 <button
-                   type="button"
-                   onClick={() => setShowAddDocumentModal(false)}
-                   className="btn-secondary flex-1"
-                 >
-                   Cancel
-                 </button>
-               </div>
-             </form>
+             )}
            </div>
-         </div>
-       )}
-     </div>
          )}
 
          {/* Approvals Tab */}
@@ -2454,10 +3190,10 @@ const OrganizationOverview = () => {
                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                  <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
                    <div className="flex items-center justify-between">
-                     <div>
+                 <div>
                        <p className="text-2xl font-bold text-blue-700">{approvalRequests.length}</p>
                        <p className="text-blue-600 font-medium">Total Requests</p>
-                     </div>
+                 </div>
                      <div className="h-12 w-12 bg-blue-200 rounded-lg flex items-center justify-center">
                        <Eye className="h-6 w-6 text-blue-700" />
                      </div>
@@ -2466,31 +3202,31 @@ const OrganizationOverview = () => {
 
                  <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-xl p-6">
                    <div className="flex items-center justify-between">
-                     <div>
+                 <div>
                        <p className="text-2xl font-bold text-yellow-700">{approvalRequests.filter(r => r.status === 'Pending').length}</p>
                        <p className="text-yellow-600 font-medium">Pending</p>
-                     </div>
+                 </div>
                      <div className="h-12 w-12 bg-yellow-200 rounded-lg flex items-center justify-center">
                        <Clock className="h-6 w-6 text-yellow-700" />
-                     </div>
-                   </div>
-                 </div>
+               </div>
+               </div>
+           </div>
 
                  <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
                    <div className="flex items-center justify-between">
                      <div>
                        <p className="text-2xl font-bold text-green-700">{approvalRequests.filter(r => r.status === 'Approved').length}</p>
                        <p className="text-green-600 font-medium">Approved</p>
-                     </div>
+         </div>
                      <div className="h-12 w-12 bg-green-200 rounded-lg flex items-center justify-center">
                        <CheckCircle className="h-6 w-6 text-green-700" />
-                     </div>
+     </div>
                    </div>
                  </div>
 
                  <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-xl p-6">
                    <div className="flex items-center justify-between">
-                     <div>
+           <div>
                        <p className="text-2xl font-bold text-red-700">{approvalRequests.filter(r => r.status === 'Rejected').length}</p>
                        <p className="text-red-600 font-medium">Rejected</p>
                      </div>
@@ -2501,7 +3237,7 @@ const OrganizationOverview = () => {
                  </div>
                </div>
              </div>
-
+             
              {/* Loading State */}
              {approvalRequestsLoading && (
                <div className="flex items-center justify-center py-12">
@@ -2668,8 +3404,189 @@ const OrganizationOverview = () => {
                    </svg>
                    Refresh
                  </button>
+                     </div>
+                   )}
+           </div>
+         )}
+
+
+
+         {/* Project Portals Tab */}
+         {activeTab === 'projectPortals' && (
+           <div>
+             {/* Header with Stats */}
+             <div className="mb-8">
+               <div className="flex items-center justify-between mb-6">
+                 <div>
+                   <h2 className="text-2xl font-bold text-gray-900">Project Portals</h2>
+                   <p className="text-gray-600 mt-1">Manage project portals for {organization.name}</p>
+                 </div>
+                 <div className="flex items-center space-x-3">
+                   <button
+                     onClick={fetchProjectPortals}
+                     disabled={projectPortalsLoading}
+                     className="btn-secondary flex items-center"
+                     title="Refresh portals"
+                   >
+                     <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                     </svg>
+                     Refresh
+                   </button>
+                   <button
+                     onClick={() => setShowAddProjectPortalModal(true)}
+                     className="btn-primary flex items-center"
+                   >
+                     <Plus className="h-4 w-4 mr-2" />
+                     Add Portal
+                   </button>
+                 </div>
+               </div>
+
+               {/* Portal Stats Cards */}
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-blue-700">{projectPortals.length}</p>
+                       <p className="text-blue-600 font-medium">Total Portals</p>
+                     </div>
+                     <div className="h-12 w-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                       <Briefcase className="h-6 w-6 text-blue-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-green-700">{projectPortals.filter(p => p.isEnabled !== false).length}</p>
+                       <p className="text-green-600 font-medium">Active Portals</p>
+                     </div>
+                     <div className="h-12 w-12 bg-green-200 rounded-lg flex items-center justify-center">
+                       <CheckCircle className="h-6 w-6 text-green-700" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-6">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-2xl font-bold text-purple-700">
+                         {projectPortals.reduce((total, portal) => total + (portal.projects?.length || 0), 0)}
+                       </p>
+                       <p className="text-purple-600 font-medium">Total Projects</p>
+                     </div>
+                     <div className="h-12 w-12 bg-purple-200 rounded-lg flex items-center justify-center">
+                       <FolderOpen className="h-6 w-6 text-purple-700" />
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             {/* Loading State */}
+             {projectPortalsLoading && (
+               <div className="flex items-center justify-center py-12">
+                 <LoadingSpinner size="lg" text="Loading project portals..." />
                </div>
              )}
+
+             {/* Portals Grid */}
+             {!projectPortalsLoading && projectPortals.length > 0 && (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {projectPortals.map((portal) => (
+                 <div key={portal.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                   {/* Portal Header */}
+                   <div className="flex items-start justify-between mb-6">
+                     <div className="flex items-center">
+                       <div className="h-12 w-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-4">
+                         <Briefcase className="h-6 w-6 text-white" />
+                       </div>
+                       <div className="flex-1">
+                         <h3 className="text-lg font-semibold text-gray-900">{portal.name}</h3>
+                         <p className="text-sm text-gray-500">{portal.description || 'No description'}</p>
+                       </div>
+                     </div>
+                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full border ${
+                       portal.isEnabled !== false 
+                         ? 'bg-green-100 text-green-800 border-green-200' 
+                         : 'bg-red-100 text-red-800 border-red-200'
+                     }`}>
+                       {portal.isEnabled !== false ? 'Active' : 'Inactive'}
+                     </span>
+                   </div>
+
+                   {/* Portal Stats */}
+                   <div className="grid grid-cols-2 gap-4 mb-6">
+                     <div className="bg-blue-50 rounded-lg p-4">
+                       <div className="flex items-center justify-between">
+                         <div>
+                           <p className="text-lg font-bold text-blue-700">{portal.projects?.length || 0}</p>
+                           <p className="text-blue-600 text-sm">Projects</p>
+                         </div>
+                         <FolderOpen className="h-5 w-5 text-blue-600" />
+                       </div>
+                     </div>
+                     <div className="bg-purple-50 rounded-lg p-4">
+                       <div className="flex items-center justify-between">
+                         <div>
+                           <p className="text-lg font-bold text-purple-700">
+                             {portal.createdAt ? new Date(portal.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}
+                           </p>
+                           <p className="text-purple-600 text-sm">Created</p>
+                         </div>
+                         <Calendar className="h-5 w-5 text-purple-600" />
+                       </div>
+                     </div>
+                   </div>
+
+                   {/* Action Buttons */}
+                   <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                     <div className="flex space-x-2">
+                       <button
+                         onClick={() => handleEditProjectPortal(portal)}
+                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                         title="Edit portal"
+                       >
+                         <Edit className="h-4 w-4" />
+                       </button>
+                       <button
+                         onClick={() => handleDeleteProjectPortal(portal.id, portal.name)}
+                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                         title="Delete portal"
+                       >
+                         <Trash2 className="h-4 w-4" />
+                       </button>
+                     </div>
+                     <div className="text-xs text-gray-400">
+                       ID: {portal.id}
+                     </div>
+                   </div>
+                 </div>
+                 ))}
+               </div>
+             )}
+
+             {/* Empty State */}
+             {!projectPortalsLoading && projectPortals.length === 0 && (
+               <div className="text-center py-16">
+                 <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-full w-32 h-32 flex items-center justify-center mx-auto mb-6">
+                   <Briefcase className="h-16 w-16 text-gray-400" />
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-3">No project portals found</h3>
+                 <p className="text-gray-500 mb-8 max-w-md mx-auto text-lg">
+                   This organization doesn't have any project portals yet. Create portals to organize your projects effectively.
+                 </p>
+                 <button
+                   onClick={() => setShowAddProjectPortalModal(true)}
+                   className="btn-primary flex items-center mx-auto"
+                 >
+                   <Plus className="h-4 w-4 mr-2" />
+                   Create First Portal
+                 </button>
+                     </div>
+                   )}
            </div>
          )}
 
@@ -2762,10 +3679,7 @@ const OrganizationOverview = () => {
                    {/* Category Header */}
                    <div className="flex items-start justify-between mb-6">
                      <div className="flex items-center">
-                       <div 
-                         className="h-12 w-12 rounded-lg flex items-center justify-center mr-4"
-                         style={{ backgroundColor: category.color || '#3B82F6' }}
-                       >
+                                             <div className="h-12 w-12 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
                          <Tag className="h-6 w-6 text-white" />
                        </div>
                        <div className="flex-1">
@@ -2858,8 +3772,20 @@ const OrganizationOverview = () => {
                      Refresh
                    </button>
                  </div>
-               </div>
-             )}
+                 </div>
+               )}
+
+
+
+             
+
+
+
+
+
+
+
+             
 
        {/* Add Category Modal */}
        {showAddCategoryModal && (
@@ -2887,16 +3813,6 @@ const OrganizationOverview = () => {
                    required
                  />
                </div>
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
-                 <input
-                   type="color"
-                   value={categoryFormData.color}
-                   onChange={(e) => setCategoryFormData({...categoryFormData, color: e.target.value})}
-                   className="input-field"
-                   required
-                 />
-               </div>
                <div className="flex space-x-3 pt-4">
                  <button type="submit" className="btn-primary flex-1">Add Category</button>
                  <button
@@ -2908,7 +3824,7 @@ const OrganizationOverview = () => {
                  </button>
                </div>
              </form>
-           </div>
+             </div>
          </div>
        )}
 
@@ -2938,16 +3854,6 @@ const OrganizationOverview = () => {
                    required
                  />
                </div>
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
-                 <input
-                   type="color"
-                   value={categoryFormData.color}
-                   onChange={(e) => setCategoryFormData({...categoryFormData, color: e.target.value})}
-                   className="input-field"
-                   required
-                 />
-               </div>
                <div className="flex space-x-3 pt-4">
                  <button type="submit" className="btn-primary flex-1">Update Category</button>
                  <button
@@ -2962,7 +3868,7 @@ const OrganizationOverview = () => {
            </div>
          </div>
        )}
-     </div>
+           </div>
          )}
        </div>
 
@@ -3085,25 +3991,17 @@ const OrganizationOverview = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Identified</label>
                   <input
-                    type="email"
-                    value={userFormData.email}
-                    onChange={(e) => setUserFormData({...userFormData, email: e.target.value})}
+                    type="text"
+                    value={userFormData.identified}
+                    onChange={(e) => setUserFormData({...userFormData, identified: e.target.value})}
                     className="input-field"
                     required
+                    readOnly
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={userFormData.phone}
-                    onChange={(e) => setUserFormData({...userFormData, phone: e.target.value})}
-                    className="input-field"
-                    required
-                  />
-                </div>
+
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -3203,24 +4101,17 @@ const OrganizationOverview = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Identified</label>
                   <input
-                    type="email"
-                    value={userFormData.email || editingUser.identified || ''}
-                    onChange={(e) => setUserFormData({...userFormData, email: e.target.value})}
+                    type="text"
+                    value={userFormData.identified || editingUser.identified || ''}
+                    onChange={(e) => setUserFormData({...userFormData, identified: e.target.value})}
                     className="input-field"
                     required
+                    readOnly
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={userFormData.phone || editingUser.phone || ''}
-                    onChange={(e) => setUserFormData({...userFormData, phone: e.target.value})}
-                    className="input-field"
-                  />
-                </div>
+
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -3314,8 +4205,7 @@ const OrganizationOverview = () => {
                     setUserFormData({
                       firstName: '',
                       lastName: '',
-                      email: '',
-                      phone: '',
+                      identified: '',
                       gender: 'Male',
                       dob: '',
                       role: 'Member',
@@ -3494,6 +4384,25 @@ const OrganizationOverview = () => {
                       onChange={(e) => setSettingsFormData({...settingsFormData, websiteURL: e.target.value})}
                       className="input-field"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+                    <select
+                      value={settingsFormData.industriesId}
+                      onChange={(e) => setSettingsFormData({...settingsFormData, industriesId: e.target.value})}
+                      className="input-field"
+                      required
+                      disabled={industriesLoading}
+                    >
+                      <option value="">
+                        {industriesLoading ? 'Loading industries...' : 'Select Industry'}
+                      </option>
+                      {industries.map((industry) => (
+                        <option key={industry.id} value={industry.id}>
+                          {industry.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>
@@ -4181,6 +5090,342 @@ const OrganizationOverview = () => {
           </div>
         </div>
       )}
+
+
+
+      {/* Add Project Portal Modal */}
+      {showAddProjectPortalModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Add Project Portal</h2>
+              <button
+                onClick={() => setShowAddProjectPortalModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleAddProjectPortal} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Portal Name</label>
+                <input
+                  type="text"
+                  value={projectPortalFormData.name}
+                  onChange={(e) => setProjectPortalFormData({...projectPortalFormData, name: e.target.value})}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={projectPortalFormData.description}
+                  onChange={(e) => setProjectPortalFormData({...projectPortalFormData, description: e.target.value})}
+                  className="input-field"
+                  rows="3"
+                  required
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="btn-primary flex-1">Add Portal</button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddProjectPortalModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Portal Modal */}
+      {showEditProjectPortalModal && editingProjectPortal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Edit Project Portal: {editingProjectPortal.name}</h2>
+              <button
+                onClick={() => setShowEditProjectPortalModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleUpdateProjectPortal} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Portal Name</label>
+                <input
+                  type="text"
+                  value={projectPortalFormData.name}
+                  onChange={(e) => setProjectPortalFormData({...projectPortalFormData, name: e.target.value})}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={projectPortalFormData.description}
+                  onChange={(e) => setProjectPortalFormData({...projectPortalFormData, description: e.target.value})}
+                  className="input-field"
+                  rows="3"
+                  required
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="btn-primary flex-1">Update Portal</button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditProjectPortalModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Document Level Modal */}
+      {showAddDocumentLevelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+            <h2 className="text-xl font-semibold mb-4">Add Document Level</h2>
+            <form onSubmit={handleAddDocumentLevel} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Level Name *</label>
+                <input
+                  type="text"
+                  value={documentLevelFormData.name}
+                  onChange={(e) => setDocumentLevelFormData({...documentLevelFormData, name: e.target.value})}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={documentLevelFormData.description}
+                  onChange={(e) => setDocumentLevelFormData({...documentLevelFormData, description: e.target.value})}
+                  className="input-field"
+                  rows="3"
+                  placeholder="Enter level description..."
+                />
+              </div>
+               {documentLevels.length > 0 && (
+                 <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Parent Level (Optional)</label>
+                   <select
+                     value={documentLevelFormData.parentId}
+                     onChange={(e) => setDocumentLevelFormData({...documentLevelFormData, parentId: e.target.value})}
+                     className="input-field"
+                   >
+                     <option value="">No Parent (Root Level)</option>
+                     {documentLevels
+                       .filter(l => l.level < parseInt(documentLevelFormData.level || 1) && l.id !== editingDocumentLevel?.id)
+                       .map(level => (
+                         <option key={level.id} value={level.id}>
+                           {level.name} (Level {level.level})
+                         </option>
+                       ))}
+                   </select>
+                 </div>
+               )}
+              
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="btn-primary flex-1">Create Level</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddDocumentLevelModal(false)
+                    setDocumentLevelFormData({
+                      name: '',
+                      description: '',
+                      parentId: ''
+                    })
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Document Level Modal */}
+      {showEditDocumentLevelModal && editingDocumentLevel && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+            <h2 className="text-xl font-semibold mb-4">Edit Document Level: {editingDocumentLevel.name}</h2>
+            <form onSubmit={handleUpdateDocumentLevel} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Level Name *</label>
+                <input
+                  type="text"
+                  value={documentLevelFormData.name}
+                  onChange={(e) => setDocumentLevelFormData({...documentLevelFormData, name: e.target.value})}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={documentLevelFormData.description}
+                  onChange={(e) => setDocumentLevelFormData({...documentLevelFormData, description: e.target.value})}
+                  className="input-field"
+                  rows="3"
+                  placeholder="Enter level description..."
+                />
+              </div>
+              {documentLevels.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Parent Level (Optional)</label>
+                  <select
+                    value={documentLevelFormData.parentId}
+                    onChange={(e) => setDocumentLevelFormData({...documentLevelFormData, parentId: e.target.value})}
+                    className="input-field"
+                  >
+                    <option value="">No Parent (Root Level)</option>
+                    {documentLevels
+                      .filter(l => l.id !== editingDocumentLevel?.id)
+                      .map(level => (
+                        <option key={level.id} value={level.id}>
+                          {level.name} (Level {level.level})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="btn-primary flex-1">Update Level</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditDocumentLevelModal(false)
+                    setEditingDocumentLevel(null)
+                    setDocumentLevelFormData({
+                      name: '',
+                      description: '',
+                      parentId: ''
+                    })
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQRModal && qrCodeData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                  <QrCode className="h-5 w-5 text-purple-600" />
+    </div>
+                <h2 className="text-xl font-semibold text-gray-900">QR Code</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowQRModal(false)
+                  setQrCodeData(null)
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="text-center">
+              <div className="bg-gray-50 rounded-lg p-6 mb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {qrCodeData.organizationName}
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Organization Code: <span className="font-mono font-medium">{qrCodeData.code}</span>
+                </p>
+                <div className="flex justify-center mb-4">
+                  <img 
+                    src={qrCodeData.qrCodeUrl} 
+                    alt="QR Code" 
+                    className="border border-gray-200 rounded-lg"
+                    width="200"
+                    height="200"
+                  />
+                </div>
+                <p className="text-xs text-gray-500">
+                  Scan this QR code to access the organization
+                </p>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      // Fetch the QR code image as a blob
+                      const response = await fetch(qrCodeData.qrCodeUrl)
+                      const blob = await response.blob()
+                      
+                      // Create a download link
+                      const url = window.URL.createObjectURL(blob)
+                      const link = document.createElement('a')
+                      link.href = url
+                      link.download = `qr-code-${qrCodeData.organizationName}.png`
+                      
+                      // Trigger download
+                      document.body.appendChild(link)
+                      link.click()
+                      
+                      // Clean up
+                      document.body.removeChild(link)
+                      window.URL.revokeObjectURL(url)
+                    } catch (error) {
+                      console.error('Error downloading QR code:', error)
+                      Swal.fire(
+                        'Error!',
+                        'Failed to download QR code. Please try again.',
+                        'error'
+                      )
+                    }
+                  }}
+                  className="btn-primary flex-1 flex items-center justify-center"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </button>
+                <button
+                  onClick={() => {
+                    setShowQRModal(false)
+                    setQrCodeData(null)
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      
     </div>
   )
 }

@@ -3,9 +3,6 @@ import { NavLink } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   Building2, 
-  Users, 
-  FolderOpen, 
-  FileText,
   Menu,
   X,
   LogOut,
@@ -21,7 +18,7 @@ const Sidebar = () => {
 
   // Fetch user organization details if user has Organization role but no organization code
   useEffect(() => {
-    if (user && (user.role === 'Organization' || user.role === 'AdminOrganization') && !user.organizationCode) {
+    if (user && (user.role === 'Organization') && !user.organizationCode) {
       setIsLoadingOrg(true)
       fetchUserOrganization().finally(() => setIsLoadingOrg(false))
     }
@@ -31,9 +28,6 @@ const Sidebar = () => {
   const getNavigation = () => {
     const baseNavigation = [
       { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-      { name: 'Users', href: '/users', icon: Users },
-      { name: 'Projects', href: '/projects', icon: FolderOpen },
-      { name: 'Documents', href: '/documents', icon: FileText },
     ]
 
     // If user has Organization role, show organization details instead of management
@@ -49,18 +43,13 @@ const Sidebar = () => {
           icon: Building2,
           disabled: isLoadingOrg
         },
-        { name: 'Users', href: '/users', icon: Users },
-        { name: 'Projects', href: '/projects', icon: FolderOpen },
-        { name: 'Documents', href: '/documents', icon: FileText },
       ]
     }
 
     // For regular users, show limited navigation
-    if (user?.role === 'Member' || user?.role === 'Approved') {
+    if (user?.role === 'Member' || user?.role === 'Approval') {
       return [
         { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-        { name: 'Projects', href: '/projects', icon: FolderOpen },
-        { name: 'Documents', href: '/documents', icon: FileText },
       ]
     }
 
@@ -68,9 +57,6 @@ const Sidebar = () => {
     return [
       { name: 'Dashboard', href: '/', icon: LayoutDashboard },
       { name: 'Organizations', href: '/organizations', icon: Building2 },
-      { name: 'Users', href: '/users', icon: Users },
-      { name: 'Projects', href: '/projects', icon: FolderOpen },
-      { name: 'Documents', href: '/documents', icon: FileText },
     ]
   }
 
@@ -94,7 +80,14 @@ const Sidebar = () => {
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex items-center justify-center h-16 px-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">Office Admin</h1>
+          <div className="flex items-center space-x-2">
+            <img 
+              src="/transparent.png" 
+              alt="Super Work Logo" 
+              className="h-8 w-auto"
+            />
+            <h1 className="text-xl font-bold text-gray-900">Super Work</h1>
+          </div>
         </div>
         
         <nav className="mt-6 px-3">
